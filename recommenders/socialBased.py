@@ -151,11 +151,13 @@ class SocialBased(ItemBased):
             # Creazione del dizionario delle amicizie
             self.createDizFriendships()
             # Ciclo su tutti gli utenti
-            for user in self.friendships:
+            for user in self.friendships.keys():
                 # Creazione Grafo delle amicizie
                 self.createGraph(user)
-                # Calcolo le communities delle amicizie
-                self.createCommunities()
+                if len(self.g.es)>0 and len(self.g.vs)>0:
+                    # Calcolo le communities delle amicizie
+                    self.createCommunities(user)
+            print("\nFinito di calcolare le communities!")
         else:
             print("\nLe communities di amici per i vari utenti sono già presenti!")
 
@@ -205,24 +207,27 @@ class SocialBased(ItemBased):
     def createGraph(self,user):
         g=Graph()
         """ Creo i nodi (utenti) del grafo """
-        users={user for user in self.friendships[user]}
-        for user in users:
-            g.add_vertex(name=user,gender="user",label=user)
+        friends=list(zip(*self.friendships[user]))[0]
+        # for user in friends:
+        #     g.add_vertex(name=user,gender="user",label=user)
 
         """ Creo gli archi (amicizie) del grafo SINGOLE """
-        listaList=[(friend,friend_friend,valSim_friendFriend) for friend,_ in self.friendships[user] for friend_friend,valSim_friendFriend in self.friendships[friend] if friend_friend in self.friendships[user]]
+        # print("\nUser: {}".format(user))
+        # print("\nself.friendships[user]: {}".format(self.friendships[user]))
+        amici=[(friend,friend_friend,valSim_friendFriend) for friend,_ in self.friendships[user] for friend_friend,valSim_friendFriend in self.friendships[friend] if friend_friend in friends]
         archi=[]
-        for lista in listaList:
-            for user,friend,weight in lista:
-                if (friend,user,weight) not in archi:
-                    archi.append((user,friend,weight))
-                    g.add_edge(user,friend,weight=weight)
+        for friend,friend_friend,weight in amici:
+            if (friend_friend,friend,weight) not in archi:
+                g.add_vertex(name=friend,gender="user",label=friend)
+                g.add_vertex(name=friend_friend,gender="user",label=friend_friend)
+                archi.append((friend,friend_friend,weight))
+                g.add_edge(friend,friend_friend,weight=weight)
 
-        self.setGrafo(g)
-        print("\nSummary:\n{}".format(summary(g)))
-        print("\nGrafo delle amicizie creato e salvato!")
+        self.g=g
+        print("\nGRAFO: {}".format(self.g))
+        print("\nGrafo delle amicizie creato per user:".format(user))
 
-    def createCommunities(self):
+    def createCommunities(self,user):
         startTime=time.time()
         g=self.g
         # calculate dendrogram
@@ -234,30 +239,28 @@ class SocialBased(ItemBased):
             types=[self.communityType]
 
         for type in types:
-            if not os.path.exists(dirPathCommunities+"/"+type+"/communitiesFriends.json"):
-                if type=="fastgreedy":
-                    dendrogram=g.community_fastgreedy(weights="weight")
-                elif type=="walktrap":
-                    dendrogram=g.community_walktrap(weights="weight")
-                elif type=="label_propagation":
-                    clusters=g.community_label_propagation(weights="weight")
-                elif type=="multilevel":
-                    clusters=g.community_multilevel(weights="weight",return_levels=False)
-                elif type=="infomap":
-                    clusters=g.community_infomap(edge_weights="weight")
+            if type=="fastgreedy":
+                dendrogram=g.community_fastgreedy(weights="weight")
+            elif type=="walktrap":
+                dendrogram=g.community_walktrap(weights="weight")
+            elif type=="label_propagation":
+                clusters=g.community_label_propagation(weights="weight")
+            elif type=="multilevel":
+                clusters=g.community_multilevel(weights="weight",return_levels=False)
+            elif type=="infomap":
+                clusters=g.community_infomap(edge_weights="weight")
 
-                # convert it into a flat clustering (VertexClustering)
-                if type!="label_propagation" and type!="multilevel" and type!="infomap":
-                    clusters = dendrogram.as_clustering()
-                # get the membership vector
-                membership = clusters.membership
-                communitiesFriends=defaultdict(list)
-                for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
-                    communitiesFriends[community].append(user)
-                saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/communitiesFriends.json")
-                print("\nClustering Summary for '{}' : \n{}".format(type,clusters.summary()))
+            # convert it into a flat clustering (VertexClustering)
+            if type!="label_propagation" and type!="multilevel" and type!="infomap":
+                clusters = dendrogram.as_clustering()
 
-        print("\nFinito di calcolare le communities!")
+            # get the membership vector
+            membership = clusters.membership
+            communitiesFriends=defaultdict(list)
+            for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
+                communitiesFriends[community].append(user)
+            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/communitiesFriends_"+str(user)+".json")
+            print("\nClustering Summary for '{}' : \n{}".format(type,clusters.summary()))
 
     def setFriendships(self,friendships):
         self.friendships=friendships
@@ -270,6 +273,3 @@ class SocialBased(ItemBased):
 
     def setCommunityType(self,type):
         self.communityType=type
-
-    def setGrafo(self,g):
-        self.g=g
