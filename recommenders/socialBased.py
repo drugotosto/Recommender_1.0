@@ -214,26 +214,22 @@ class SocialBased(ItemBased):
             g.write_graphml(f=open(userFriendsGraph+".graphml","wb"))
 
         g=Graph()
-        # Recupero i vertici (users) del grafo delle amicizie
-        # users={user for user in self.getFriendships().keys()}.union({friend for listFriends in self.getFriendships().values() for friend,weight in listFriends})
+        """ Creo i nodi (utenti) del grafo """
         users={user for user in self.friendships.keys()}
         for user in users:
             g.add_vertex(name=user,gender="user",label=user)
 
         def createPairs(user,listItems):
-            return [(user,item[0]) for item in listItems]
+            return [(user,item[0],item[1]) for item in listItems]
 
         """ Creo gli archi (amicizie) del grafo SINGOLE """
         listaList=[createPairs(user,listItems) for user,listItems in self.friendships.items()]
         archi=[]
         for lista in listaList:
-            for user,elem in lista:
-                if (elem,user) not in archi:
-                    archi.append((user,elem))
-        g.add_edges(archi)
-        # Aggiungo i relativi pesi agli archi
-        weights=[weight for user,listItems in self.friendships.items() for _,weight in listItems]
-        g.es["weight"]=weights
+            for user,friend,weight in lista:
+                if (friend,user,weight) not in archi:
+                    archi.append((user,friend,weight))
+                    g.add_edge(user,friend,weight=weight)
 
         saveGraphs(g)
         print("\nSummary:\n{}".format(summary(g)))
