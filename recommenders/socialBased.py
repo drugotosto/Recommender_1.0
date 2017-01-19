@@ -146,24 +146,18 @@ class SocialBased(ItemBased):
         return user_id,sorted(scored_items,key=operator.itemgetter(0),reverse=True)
 
     def createFriendsCommunities(self):
-        if not os.path.exists(userFriendsGraph):
-            print("\nCreazione del grafo delle amicizie!")
+        if not os.path.exists(dirPathCommunities+self.communityType):
+            print("\nCreazione del grafo delle amicizie per i vari utenti con algoritmo scelto!")
             # Creazione del dizionario delle amicizie
             self.createDizFriendships()
-            # Creazione Grafo delle amicizie
-            self.createGraph()
-        else:
-            print("\nIl grafo delle amicizie è già presente!")
-
-        if self.communityType!="all":
-            if not os.path.exists(dirPathCommunities+"/"+self.communityType+"/communitiesFriends.json"):
+            # Ciclo su tutti gli utenti
+            for user in self.friendships:
+                # Creazione Grafo delle amicizie
+                self.createGraph(user)
                 # Calcolo le communities delle amicizie
                 self.createCommunities()
-            else:
-                print("\nIl file delle communities dell'algoritmo scelto è già presente!")
         else:
-            print("\nHo deciso di trovare le communities per tutti i vari algoritmi!")
-            self.createCommunities()
+            print("\nLe communities di amici per i vari utenti sono già presenti!")
 
     def createDizFriendships(self):
         def createPairs(user,listFriends):
@@ -208,22 +202,15 @@ class SocialBased(ItemBased):
         self.setFriendships(friendships)
         print("\nDizionario delle amicizie pesato creato e settato!")
 
-    def createGraph(self):
-        def saveGraphs(g):
-            g.write_pickle(fname=open(userFriendsGraph,"wb"))
-            g.write_graphml(f=open(userFriendsGraph+".graphml","wb"))
-
+    def createGraph(self,user):
         g=Graph()
         """ Creo i nodi (utenti) del grafo """
-        users={user for user in self.friendships.keys()}
+        users={user for user in self.friendships[user]}
         for user in users:
             g.add_vertex(name=user,gender="user",label=user)
 
-        def createPairs(user,listItems):
-            return [(user,item[0],item[1]) for item in listItems]
-
         """ Creo gli archi (amicizie) del grafo SINGOLE """
-        listaList=[createPairs(user,listItems) for user,listItems in self.friendships.items()]
+        listaList=[(friend,friend_friend,valSim_friendFriend) for friend,_ in self.friendships[user] for friend_friend,valSim_friendFriend in self.friendships[friend] if friend_friend in self.friendships[user]]
         archi=[]
         for lista in listaList:
             for user,friend,weight in lista:
@@ -231,13 +218,13 @@ class SocialBased(ItemBased):
                     archi.append((user,friend,weight))
                     g.add_edge(user,friend,weight=weight)
 
-        saveGraphs(g)
+        self.setGrafo(g)
         print("\nSummary:\n{}".format(summary(g)))
         print("\nGrafo delle amicizie creato e salvato!")
 
     def createCommunities(self):
         startTime=time.time()
-        g=Graph.Read_Pickle(fname=open(userFriendsGraph,"rb"))
+        g=self.g
         # calculate dendrogram
         dendrogram=None
         clusters=None
@@ -284,3 +271,5 @@ class SocialBased(ItemBased):
     def setCommunityType(self,type):
         self.communityType=type
 
+    def setGrafo(self,g):
+        self.g=g

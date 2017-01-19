@@ -8,8 +8,8 @@ from conf.confRS import tag, numRec, numTags
 directoryDataSets="/home/maury/Desktop/Datasets/Yelp/Dataset/yelp_dataset_challenge_academic_dataset/"
 # Directory di lavoro principale della categoria selezionata che contiene i files tramite i quali ci si basa per fare recommandations
 dirPathInput="/home/maury/Desktop/SparkSets/"+tag+"/DataSet_(numRec="+str(numRec)+" numTags="+str(numTags)+")/"
-# Directory che contiene tutti le diverse communities di amici trovare a seconda dell'algortimo utilizzato
-dirPathCommunities=dirPathInput+"Communities/"
+# Directory che contiene tutti le diverse communities di amici trovare a seconda dell'algortimo utilizzato per ogni utente
+dirPathCommunities=dirPathInput+"Communities/Users/"
 # Directory che contiene un file per ogni tipologia di Recommender di cui si sono calcolati i risultati della K-Fold Cross-Validation
 dirPathOutput="/home/maury/Desktop/SparkOutput/"+tag+"/DataSet_(numRec="+str(numRec)+" numTags="+str(numTags)+")/"
 
