@@ -189,18 +189,6 @@ class SocialBased(ItemBased):
 
         friendships={user:createListFriendsDoubleWeight(user,dizFriendshipsDouble) for user in dizFriendshipsDouble}
 
-        # """ Per ogni arco (user1-user2) vado ad eliminare la controparte (user2-user1) """
-        # archi=set()
-        # for user,listFriends in dizFriendshipsDoubleWeight.items():
-        #     for elem in listFriends:
-        #         if (user,elem[0],elem[1]) not in archi and (elem[0],user,elem[1]) not in archi:
-        #             archi.add((user,elem[0],elem[1]))
-        #
-        # """ Costruisco il dizionario finale da salvare """
-        # friendships=defaultdict(list)
-        # for k,v,r in archi:
-        #     friendships[k].append((v,r))
-
         print("\nNumero di AMICIZIE (doppie) presenti sono: {}".format(sum([len(lista) for lista in friendships.values()])))
         # numUtenti=len(set([user for user in friendships]).union(set([user for lista in friendships.values() for user,_ in lista])))
         numUtenti=len(list(friendships.keys()))
