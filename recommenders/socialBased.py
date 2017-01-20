@@ -205,6 +205,9 @@ class SocialBased(ItemBased):
         print("\nDizionario delle amicizie pesato creato e settato!")
 
     def createGraph(self,user):
+        def saveGraphs(g):
+            g.write_graphml(f=open(userFriendsGraph+"_"+user+".graphml","wb"))
+
         g=Graph()
         """ Creo i nodi (utenti) del grafo """
         friends=list(zip(*self.friendships[user]))[0]
@@ -212,8 +215,8 @@ class SocialBased(ItemBased):
         #     g.add_vertex(name=user,gender="user",label=user)
 
         """ Creo gli archi (amicizie) del grafo SINGOLE """
-        # print("\nUser: {}".format(user))
-        # print("\nself.friendships[user]: {}".format(self.friendships[user]))
+        print("\nUser: {}".format(user))
+        print("\nself.friendships[user]: {}".format(self.friendships[user]))
         amici=[(friend,friend_friend,valSim_friendFriend) for friend,_ in self.friendships[user] for friend_friend,valSim_friendFriend in self.friendships[friend] if friend_friend in friends]
         archi=[]
         for friend,friend_friend,weight in amici:
@@ -223,11 +226,12 @@ class SocialBased(ItemBased):
                 archi.append((friend,friend_friend,weight))
                 g.add_edge(friend,friend_friend,weight=weight)
 
+        saveGraphs(g)
         self.g=g
         print("\nGRAFO: {}".format(self.g))
         print("\nGrafo delle amicizie creato per user:".format(user))
 
-    def createCommunities(self,user):
+    def createCommunities(self,utente):
         startTime=time.time()
         g=self.g
         # calculate dendrogram
@@ -259,7 +263,7 @@ class SocialBased(ItemBased):
             communitiesFriends=defaultdict(list)
             for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
                 communitiesFriends[community].append(user)
-            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/communitiesFriends_"+str(user)+".json")
+            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/communitiesFriends_"+str(utente)+".json")
             print("\nClustering Summary for '{}' : \n{}".format(type,clusters.summary()))
 
     def setFriendships(self,friendships):
