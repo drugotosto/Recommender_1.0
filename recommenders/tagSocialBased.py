@@ -1,3 +1,4 @@
+import operator
 import os
 from conf.confItemBased import weightSim
 from recommenders.tagBased import TagBased
@@ -38,7 +39,7 @@ class TagSocialBased(SocialBased,TagBased):
         # print("\nDIZ COM: {}".format(user_meanRatesTags))
 
         """
-        Calcolo delle somiglianze tra users in base ai TAGS e creazione del corrispondente RDD
+        Calcolo delle somiglianze tra users in base ai TAGS e creazione del corrispondente RDD (Recupero primi N vicini)
         """
         if not os.path.exists(dirPathInput+"user_simsOrd(weightSim="+str(weightSim)+")/"):
             print("\nNon esistono ancora i valori di somiglianza tra Users. Vado a calcolarli!")
@@ -51,25 +52,28 @@ class TagSocialBased(SocialBased,TagBased):
             print("\nLa somiglianza tra Users e già presente")
             user_simsTags=spEnv.getSc().textFile(dirPathInput+"user_simsOrd(weightSim="+str(weightSim)+")/").map(lambda x: json.loads(x))
 
-        # for user,user_valPairs in user_simsTags.take(1):
+        # print("\nSOMIGLIANZE tra Users in base a TAGS:")
+        # for user,user_valPairs in user_simsTags.take(5):
         #     print("\nUser : {}".format(user))
         #     print("User - PairVal :{}".format(list(user_valPairs)))
 
         """
-        Calcolo delle somiglianze tra users in base alle CommunitiesFriends e creazione del corrispondente RDD
+        Calcolo delle somiglianze tra users in base alle CommunitiesFriends e creazione del corrispondente RDD (Per ogni utente recupero la lista di tutti i suoi vicini)
         """
         if not os.path.exists(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/"):
             nNeigh=self.nNeigh
             # Recupero RDD con l'elenco delle communities associate ognuna ad una lista di utenti di cui ne fanno parte
             comm_listUsers=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/communitiesFriends.json").map(lambda x: json.loads(x))
             # Calcolo del valore di somiglianza tra tutti gli utenti appartenenti alla stessa communities ritorno i primi "N" Amici più simili: (user,[(user,valSim),...])
-            user_simsFriends=self.computeSimilarityFriends(spEnv,comm_listUsers).map(lambda p: SocialBased.nearestFriendsNeighbors(p[0],p[1],nNeigh)).filter(lambda p: p!=None)
+            user_simsFriends=self.computeSimilarityFriends(spEnv,comm_listUsers).filter(lambda p: p!=None)
+            # .map(lambda p: SocialBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
             user_simsFriends.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/")
         else:
             print("\nLe somiglianze tra friends appartenenti alle stesse communities (trovate dall'algoritmo {}) sono già presenti!".format(self.communityType))
             user_simsFriends=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/").map(lambda x: json.loads(x))
 
-        # for user,user_valPairs in user_simsFriends.take(1):
+        # print("\nSOMIGLIANZE tra Users in base a AMICI:")
+        # for user,user_valPairs in user_simsFriends.take(5):
         #     print("\nUser : {}".format(user))
         #     print("User - PairVal :{}".format(list(user_valPairs)))
 
@@ -82,8 +86,8 @@ class TagSocialBased(SocialBased,TagBased):
         # print("\nSemplificato RDD_TAGS Somiglianze!")
         nNeigh=self.nNeigh
         user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
-        print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
-        print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
+        # print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
+        # print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
 
         """
         # Creazione RDD delle somiglianze finale che tiene conto dei due RDD (Variante 2) (Con filtro Neighboors su TAGS)
@@ -118,6 +122,7 @@ class TagSocialBased(SocialBased,TagBased):
         Unisco l'RDD dei tags a quello delle amicizie in base allo stesso user andando a sommare
         i valori di somiglianza nel momento in cui il vicino è lo stesso in entrambi gli RDD, in
         caso contrario mantengo solamente i vicini rispetto ai tags
+        (Se oltre ad essere somigliante per gusti lo è anche per via delle amicizie ho un di più)
         :param listPair1: lista di coppie (user,valSim) per RDD dei tags
         :param listPair2: lista di coppie (user,valSim) per RDD dei friends
         :return:

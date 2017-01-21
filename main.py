@@ -58,72 +58,72 @@ if __name__ == '__main__':
         rs=TagSocialBased(name="TagSocialBased",friendships=friendships,communityType=communityType)
         rs.createFriendsCommunities()
 
-    # if not os.path.exists(dirFolds):
-    #     """ Creazione dei files (trainSetFold_k/testSetFold_k) per ogni prova di valutazione"""
-    #     # SUDDIVISIONE DEGLI UTENTI IN K_FOLD
-    #     usersFolds=np.array_split(choice(analyzer.getDataFrame()["user_id"].unique(),analyzer.getDataFrame()["user_id"].unique().shape[0],replace=False),nFolds)
-    #     rs.createFolds(spEnv,list(map(list,usersFolds)))
-    #     print("\nCreazione files  all'interno delle cartelle 'Folds/train_k' -  'Folds/test_k' terminata!")
-    # else:
-    #     print("\nLe cartelle 'Folds/train_k' erano gia presenti!")
-    #
-    # fold=0
-    # # Ciclo su tutti i folds files (train/test)
-    # while fold<nFolds:
-    #     """ Costruzione del modello a seconda dell'approccio utilizzato """
-    #     rs.builtModel(spEnv,dirTrain+str(fold))
-    #     print("\nModello costruito!")
-    #     """
-    #     Ho calcolato tutte le TOP-N raccomandazioni personalizzate per i vari utenti con tanto di predizione per ciascun item
-    #     Eseguo la valutazione del recommender utilizzando le diverse metriche (MAE,RMSE,Precision,Recall,...)
-    #     """
-    #     rs.retrieveTestData(dirTest+str(fold))
-    #     rs.getEvaluator().computeEvaluation(rs.getDictRec(),analyzer)
-    #     print("\nEseguita Valutazione per Fold {}".format(fold))
-    #     fold+=1
-    #
-    # """
-    # Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
-    # """
-    # if not "Social" in rs.getName():
-    #     fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
-    # else:
-    #     fileName=dirPathOutput+rs.getName()+"/"+communityType+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
-    # printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
-    # print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
+    if not os.path.exists(dirFolds):
+        """ Creazione dei files (trainSetFold_k/testSetFold_k) per ogni prova di valutazione"""
+        # SUDDIVISIONE DEGLI UTENTI IN K_FOLD
+        usersFolds=np.array_split(choice(analyzer.getDataFrame()["user_id"].unique(),analyzer.getDataFrame()["user_id"].unique().shape[0],replace=False),nFolds)
+        rs.createFolds(spEnv,list(map(list,usersFolds)))
+        print("\nCreazione files  all'interno delle cartelle 'Folds/train_k' -  'Folds/test_k' terminata!")
+    else:
+        print("\nLe cartelle 'Folds/train_k' erano gia presenti!")
+
+    fold=0
+    # Ciclo su tutti i folds files (train/test)
+    while fold<nFolds:
+        """ Costruzione del modello a seconda dell'approccio utilizzato """
+        rs.builtModel(spEnv,dirTrain+str(fold))
+        print("\nModello costruito!")
+        """
+        Ho calcolato tutte le TOP-N raccomandazioni personalizzate per i vari utenti con tanto di predizione per ciascun item
+        Eseguo la valutazione del recommender utilizzando le diverse metriche (MAE,RMSE,Precision,Recall,...)
+        """
+        rs.retrieveTestData(dirTest+str(fold))
+        rs.getEvaluator().computeEvaluation(rs.getDictRec(),analyzer)
+        print("\nEseguita Valutazione per Fold {}".format(fold))
+        fold+=1
+
+    """
+    Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
+    """
+    if not "Social" in rs.getName():
+        fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
+    else:
+        fileName=dirPathOutput+rs.getName()+"/"+communityType+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
+    printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
+    print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
 
 
     """
     CODICE DA UTILIZZARE PER TESTARE I VARI ALGORTIMI DI DETECTION COMMUNITY
     """
-    # Ciclo su tutti i folds files (train/test)
-    if communityType=="all":
-        for type in communitiesTypes:
-            fold=0
-            rs.evaluator.dataEval={"nTestRates":[],"nPredPers":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
-            rs.setCommunityType(type)
-            while fold<nFolds:
-                """ Costruzione del modello a seconda dell'approccio utilizzato """
-                rs.builtModel(spEnv,dirTrain+str(fold))
-                print("\nModello costruito!")
-                """
-                Ho calcolato tutte le TOP-N raccomandazioni personalizzate per i vari utenti con tanto di predizione per ciascun item
-                Eseguo la valutazione del recommender utilizzando le diverse metriche (MAE,RMSE,Precision,Recall,...)
-                """
-                rs.retrieveTestData(dirTest+str(fold))
-                rs.getEvaluator().computeEvaluation(rs.getDictRec(),analyzer)
-                print("\nEseguita Valutazione per Fold {}".format(fold))
-                fold+=1
-
-            """
-            Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
-            """
-            if not "Social" in rs.getName():
-                fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
-            else:
-                fileName=dirPathOutput+rs.getName()+"/"+type+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+")"
-            printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
-            print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
+    # # Ciclo su tutti i folds files (train/test)
+    # if communityType=="all":
+    #     for type in communitiesTypes:
+    #         fold=0
+    #         rs.evaluator.dataEval={"nTestRates":[],"nPredPers":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
+    #         rs.setCommunityType(type)
+    #         while fold<nFolds:
+    #             """ Costruzione del modello a seconda dell'approccio utilizzato """
+    #             rs.builtModel(spEnv,dirTrain+str(fold))
+    #             print("\nModello costruito!")
+    #             """
+    #             Ho calcolato tutte le TOP-N raccomandazioni personalizzate per i vari utenti con tanto di predizione per ciascun item
+    #             Eseguo la valutazione del recommender utilizzando le diverse metriche (MAE,RMSE,Precision,Recall,...)
+    #             """
+    #             rs.retrieveTestData(dirTest+str(fold))
+    #             rs.getEvaluator().computeEvaluation(rs.getDictRec(),analyzer)
+    #             print("\nEseguita Valutazione per Fold {}".format(fold))
+    #             fold+=1
+    #
+    #         """
+    #         Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
+    #         """
+    #         if not "Social" in rs.getName():
+    #             fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
+    #         else:
+    #             fileName=dirPathOutput+rs.getName()+"/"+type+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+")"
+    #         printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
+    #         print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
 
 
 

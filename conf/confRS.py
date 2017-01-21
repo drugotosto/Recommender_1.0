@@ -1,7 +1,7 @@
 __author__ = 'maury'
 
 """ File di configurazione generico del RS. """
-typeRecommender="SocialBased"
+typeRecommender="TagSocialBased"
 # Numero di Folds in cui si dividono gli users/ratings per effettuare la valutazione del RS (K-Fold Cross-Validation)
 nFolds=5
 # Parametro relativo al numero di elementi della lista dei sugerimenti finali rilasciati all'utente
@@ -11,9 +11,9 @@ tag="Nightlife"
 # Categorie di Default da non prendere in considerazione quando si filtra il DataSet
 tagToFilter=["Restaurants","Bars"]
 # Numero di recensioni minime (con rate) che ogni utente deve aver stilato
-numRec=4
+numRec=10
 # Numero di tags minimi che devono essere condivisi dai business votati dagli utenti perchè loro stessi siano presenti nel DataSet
-numTags=2
+numTags=1
 # Percentuale del numero di rates da prendere (per ogni utente) che faranno parte del test set sul numero totale di ratings disponibili
 percTestRates=0.2
 
