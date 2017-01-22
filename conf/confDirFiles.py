@@ -31,5 +31,5 @@ datasetJSON=dirPathInput+"dataSetRatings.json"
 # File Json che associa ad ogni utente l'insieme dei Tags dei business da lui votati con peso associato
 userTagJSON=dirPathInput+"userTag.json"
 # File Grafo pesato delle amicizie tra utenti
-userFriendsGraph=dirPathInput+"userFriendsGraph"
+userFriendsGraph=dirPathInput+"GrafiAmicizie/"
 

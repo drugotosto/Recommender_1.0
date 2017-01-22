@@ -39,6 +39,7 @@ def saveJsonData(data,directory,fileName):
         for dato in data:
             f.write(json.dumps(dato)+"\n")
 
+
 def convertJsonToCSV(fileJson):
     row = json.load(open(fileJson,"r"))
     print(row)
