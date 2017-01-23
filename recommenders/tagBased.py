@@ -52,9 +52,9 @@ class TagBased(ItemBased):
             print("\nLa somiglianza tra Users e già presente")
             user_simsOrd=spEnv.getSc().textFile(dirPathInput+"user_simsOrd(weightSim="+str(weightSim)+")/").map(lambda x: json.loads(x))
 
-        for user,user_valPairs in user_simsOrd.take(1):
-            print("\nUser : {}".format(user))
-            print("User - PairVal :{}".format(list(user_valPairs)))
+        # for user,user_valPairs in user_simsOrd.take(1):
+        #     print("\nUser : {}".format(user))
+        #     print("User - PairVal :{}".format(list(user_valPairs)))
 
         """
         Calcolo delle raccomandazioni personalizzate per i diversi utenti

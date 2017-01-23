@@ -1,3 +1,4 @@
+from math import log
 import operator
 
 __author__ = 'maury'
@@ -42,7 +43,7 @@ class DataScienceAnalyzer():
         dfMerge,dizUserTag=self.userFilterByNumTags(dfMerge)
 
         print("\nCreazione del File Json 'dizUserTag' che associa ad ogni utente la lista dei Tags dei business da lui votati con relativo peso con valori [0-10]")
-        self.createUserTagJSON(dizUserTag)
+        self.createUserTagJSON(dizUserTag,dfMerge)
 
         print("\nPer ogni utente rimuovo tutti i corrispondenti amici che non risultano far parte tra gli utenti finali del Dataset preso in considerazione")
         dfMerge=self.userFilterByFriends(dfMerge)
@@ -155,15 +156,30 @@ class DataScienceAnalyzer():
         return (dfMerge[dfMerge["user_id"].isin(dizUserTag.keys())],dizUserTag)
 
 
-    def createUserTagJSON(self,dizUserTag):
-        # Calcolo del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet
-        tagsCounter=Counter([pair[0] for listPairs in dizUserTag.values() for pair in listPairs])
-        numTotTags=sum(tagsCounter.values())
-        dizTags={tag:1-(val/numTotTags) for tag,val in tagsCounter.items()}
+    def createUserTagJSON(self,dizUserTag,dfMerge):
+        """
+        Per ogni utente calcolo del valore Tf-Idf associato ad ogni Tag a cui si è interessato.
+        :param dizUserTag: Dizionario che associa ad ogni utente una lista di coppie (val,tag) che rappresentano numero di recensioni che si riferiscono ad un business con associato tag
+        """
+        # Dizionario che associa ad ogni Tag il numero di business vengono associati al dato tag
+        tagsCounter=Counter([tag for arr in dfMerge[["business_id","categories"]].drop_duplicates(subset="business_id")["categories"].values for tag in arr])
+        # Creazione del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet (idf)
+        dizTags={tag:log((dfMerge["business_id"].unique().shape[0]/val),10) for tag,val in tagsCounter.items()}
 
-        # Creazione file Json "userTag.json" che associa ogni utente l'insieme dei Tags dei business da lui votati con relativo peso
-        saveJsonData([(user,tag,((val/sum(list(zip(*listPairs))[1]))*dizTags[tag])*10) for user,listPairs in dizUserTag.items() for tag,val in listPairs],dirPathInput,userTagJSON)
+        # Dizionario che associa ad ogni utente il numero delle recensioni da lui stilate
+        dictUser_Nrec=dict(dfMerge.groupby("user_id").size())
+        # Creazione file Json "userTag.json" che associa ogni utente l'insieme dei Tags dei business da lui votati con relativo valore Tf-Idf
+        saveJsonData([(user,tag,((val/dictUser_Nrec[user])*dizTags[tag])) for user,listPairs in dizUserTag.items() for tag,val in listPairs],dirPathInput,userTagJSON)
 
+        """ OLD """
+        # # Calcolo del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet
+        # tagsCounter=Counter([pair[0] for listPairs in dizUserTag.values() for pair in listPairs])
+        # numTotTags=sum(tagsCounter.values())
+        # dizTags={tag:1-(val/numTotTags) for tag,val in tagsCounter.items()}
+        #
+        # # Creazione file Json "userTag.json" che associa ogni utente l'insieme dei Tags dei business da lui votati con relativo peso
+        # saveJsonData([(user,tag,((val/sum(list(zip(*listPairs))[1]))*dizTags[tag])*10) for user,listPairs in dizUserTag.items() for tag,val in listPairs],dirPathInput,userTagJSON)
+        """ Fine OLD """
 
     def userFilterByFriends(self, dfMerge):
         def filterFriends(x):
