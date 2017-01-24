@@ -1,3 +1,5 @@
+from recommenders.tagSocialPersonalBased import TagSocialPersonalBased
+
 __author__ = 'maury'
 
 import os
@@ -16,7 +18,8 @@ from tools.dataSetAnalyzer import DataScienceAnalyzer
 from recommenders.socialBased import SocialBased
 from recommenders.tagBased import TagBased
 from conf.confCommunitiesFriends import communityType, communitiesTypes
-from recommenders.tagSocialBased import TagSocialBased
+from recommenders.tagSocialImpersonalBased import TagSocialImpersonalBased
+
 
 if __name__ == '__main__':
     startTime=time.time()
@@ -53,10 +56,16 @@ if __name__ == '__main__':
         friendships=analyzer.retrieveFriends()
         rs=SocialBased(name="SocialBased",friendships=friendships,communityType=communityType)
         rs.createFriendsCommunities()
-    elif typeRecommender=="TagSocialBased":
+    elif typeRecommender=="TagSocialImpersonalBased":
         friendships=analyzer.retrieveFriends()
-        rs=TagSocialBased(name="TagSocialBased",friendships=friendships,communityType=communityType)
+        rs=TagSocialImpersonalBased(name="TagSocialImpersonalBased",friendships=friendships,communityType=communityType)
         rs.createFriendsCommunities()
+    elif typeRecommender=="TagSocialPersonalBased":
+        friendships=analyzer.retrieveFriends()
+        rs=TagSocialPersonalBased(name="TagSocialPersonalBased",friendships=friendships,communityType=communityType)
+        rs.createFriendsCommunities()
+        rs.createCommHomofily()
+
 
     # if not os.path.exists(dirFolds):
     #     """ Creazione dei files (trainSetFold_k/testSetFold_k) per ogni prova di valutazione"""

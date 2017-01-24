@@ -1,18 +1,17 @@
+import json
 import os
+from statistics import mean
+from conf.confDirFiles import dirPathCommunities, dirPathInput, userTagJSON
 from conf.confItemBased import weightSim
-from recommenders.tagBased import TagBased
+from recommenders.tagSocialImpersonalBased import TagSocialImpersonalBased
 
 __author__ = 'maury'
 
-import json
-
 from recommenders.socialBased import SocialBased
-from recommenders.itemBased import ItemBased
-from conf.confCommunitiesFriends import fileFriendsCommunities
-from conf.confDirFiles import userTagJSON, dirPathInput, dirPathCommunities
+from recommenders.tagBased import TagBased
 
 
-class TagSocialBased(SocialBased,TagBased):
+class TagSocialPersonalBased(SocialBased,TagBased):
     def __init__(self,name,friendships,communityType):
         SocialBased.__init__(self,name,friendships,communityType)
 
@@ -25,15 +24,15 @@ class TagSocialBased(SocialBased,TagBased):
         Calcolo media dei Ratings (per ogni user) e creazione della corrispondente broadcast variable
         """
         # Unisco tutti i dati (da tutti i files contenuti nella directory train_k) ottengo (user,[(item,score),(item,score),...]
-        user_item_pair=spEnv.getSc().textFile(directory+"/*").map(lambda line: TagSocialBased.parseFileUser(line)).groupByKey()
-        user_meanRatesRatings=user_item_pair.map(lambda p: TagSocialBased.computeMean(p[0],p[1])).collectAsMap()
+        user_item_pair=spEnv.getSc().textFile(directory+"/*").map(lambda line: TagSocialImpersonalBased.parseFileUser(line)).groupByKey()
+        user_meanRatesRatings=user_item_pair.map(lambda p: TagSocialImpersonalBased.computeMean(p[0],p[1])).collectAsMap()
         dictUser_meanRatesRatings=spEnv.getSc().broadcast(user_meanRatesRatings)
 
         """
         Calcolo media dei valori associati ai Tags (per ogni user) e creazione della corrispondente broadcast variable (Utilizzo per misura Pearson)
         """
-        user_tagVal_pairs=spEnv.getSc().textFile(userTagJSON).map(lambda line: TagSocialBased.parseFileUser(line)).groupByKey()
-        user_meanRatesTags=user_tagVal_pairs.map(lambda p: TagSocialBased.computeMean(p[0],p[1])).collectAsMap()
+        user_tagVal_pairs=spEnv.getSc().textFile(userTagJSON).map(lambda line: TagSocialImpersonalBased.parseFileUser(line)).groupByKey()
+        user_meanRatesTags=user_tagVal_pairs.map(lambda p: TagSocialImpersonalBased.computeMean(p[0],p[1])).collectAsMap()
         dictUser_meanRatesTags=spEnv.getSc().broadcast(user_meanRatesTags)
         # print("\nDIZ COM: {}".format(user_meanRatesTags))
 
@@ -75,27 +74,15 @@ class TagSocialBased(SocialBased,TagBased):
 
 
         """
-        Creazione RDD delle somiglianze finale che tiene conto dei due RDD (Variante 1) (Senza filtro Neighbors su TAGS)
+        Creazione RDD delle somiglianze finale che tiene conto dei due RDD (Senza filtro Neighbors su TAGS)
         """
         # Modifica dell'RDD relativo ai TAGS
-        user_simsTags=user_simsTags.mapValues(lambda x: TagSocialBased.RemoveTags(x))
+        user_simsTags=user_simsTags.mapValues(lambda x: TagSocialImpersonalBased.RemoveTags(x))
         # print("\nSemplificato RDD_TAGS Somiglianze!")
         nNeigh=self.nNeigh
-        user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
+        user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialImpersonalBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialImpersonalBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialImpersonalBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
         print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
         print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
-
-        """
-        # Creazione RDD delle somiglianze finale che tiene conto dei due RDD (Variante 2) (Con filtro Neighboors su TAGS)
-        # """
-        # # Modifica dell'RDD relativo ai TAGS
-        # user_simsTags=user_simsTags.mapValues(lambda x: TagSocialBased.RemoveTags(x))
-        # nNeigh=self.nNeigh
-        # user_simsTagsN=user_simsTags.map(lambda p: TagSocialBased.nearestNeighbors(p[0],p[1],nNeigh)).collectAsMap()
-        # dictUser_simsTags=spEnv.getSc().broadcast(user_simsTagsN)
-        # user_simsTot=user_simsFriends.map(lambda p: TagSocialBased.unisco(p[0],p[1],dictUser_simsTags.value)).cache()
-        # print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
-        # print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(1)))
 
         """
         Calcolo delle raccomandazioni personalizzate per i diversi utenti
@@ -103,7 +90,7 @@ class TagSocialBased(SocialBased,TagBased):
         user_item_hist=user_item_pair.collectAsMap()
         userHistoryRates=spEnv.getSc().broadcast(user_item_hist)
         # Calcolo per ogni utente la lista di TUTTI gli items suggeriti ordinati secondo predizione. Ritorno un pairRDD del tipo (user,[(scorePred,item),(scorePred,item),...])
-        user_item_recs = user_simsTot.map(lambda p: TagSocialBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagSocialBased.convertFloat_Int(p[0],p[1])).collectAsMap()
+        user_item_recs = user_simsTot.map(lambda p: TagSocialImpersonalBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagSocialImpersonalBased.convertFloat_Int(p[0],p[1])).collectAsMap()
         # Immagazzino la lista dei suggerimenti finali prodotti per sottoporla poi a valutazione
         self.setDictRec(user_item_recs)
         # print("\nLista suggerimenti: {}".format(self.dictRec))
@@ -133,18 +120,6 @@ class TagSocialBased(SocialBased,TagBased):
             lista.append((pair1[0],valSim))
         return lista
 
-    @staticmethod
-    def unisco(user_id,users_with_sim,dictUser_simsTags):
-        # Controllo la presenza dell'utente all'interno del dizionario
-        if user_id in dictUser_simsTags:
-            dictUsersTagSim=dict(dictUser_simsTags[user_id])
-            # Ciclo sulle coppie di (utente,valSim) e costruisco la lista delle somiglianze finale
-            lista=[(userFriendSim,valFriendSim+dictUsersTagSim[userFriendSim]) for userFriendSim,valFriendSim in users_with_sim if userFriendSim in dictUsersTagSim.keys()]
-        else:
-            lista=[(userFriendSim,valFriendSim) for userFriendSim,valFriendSim in users_with_sim]
-
-        return user_id,lista
-
 
     @staticmethod
     def filterSimilarities(user_id,users_and_sims):
@@ -157,3 +132,31 @@ class TagSocialBased(SocialBased,TagBased):
         lista=[item for item in users_and_sims if item[1]>=0.5]
         if len(lista)>0:
             return user_id,lista
+
+
+    def createFriendsCommunities(self):
+        if not os.path.exists(dirPathCommunities+self.communityType):
+            print("\nCreazione del grafo delle amicizie per i vari utenti con algoritmo scelto!")
+            # Creazione del dizionario delle amicizie
+            self.createDizFriendships()
+            # Ciclo su tutti gli utenti
+            count=0
+            listInfoUsersClusters=[]
+            for user in self.friendships.keys():
+                # Creazione Grafo delle amicizie
+                self.createGraph(user)
+                if len(self.g.es)>0 and len(self.g.vs)>0:
+                    count+=1
+                    # Calcolo le communities delle amicizie
+                    numClusters,sizeClusters=self.createCommunities(user)
+                    # Per ogni utente memorizzo il numero di Clusters di amici rilevati e la grandezza media riscontrata
+                    listInfoUsersClusters.append((numClusters,mean(sizeClusters)))
+            self.setNumUtentiWithClusters(count)
+            self.setNumMedioClusters(mean(list(zip(*listInfoUsersClusters))[0]))
+            self.setSizeMedioClusters(mean(list(zip(*listInfoUsersClusters))[1]))
+            print("\n\nzNumero di utenti per i quali è presente almeno 1 community: {}".format(self.numUtentiWithClusters))
+            print("Numero medio di clusters presenti: {}".format(self.numMedioClusters))
+            print("Grandezza media dei clusters presenti: {}".format(self.sizeMedioClusters))
+
+    def createCommHomofily(self):
+        pass
