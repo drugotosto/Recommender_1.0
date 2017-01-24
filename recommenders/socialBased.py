@@ -19,12 +19,6 @@ class SocialBased(ItemBased):
         # Settaggio del dizionazio delle amicizie (inzialmente non pesato)
         self.friendships=friendships
         self.communityType=communityType
-        # Numero di utenti che presentano almeno 1 clusers di utenti
-        self.numUtentiWithClusters=None
-        # Numero medio dei Clusters trovati usando l'algoritmo di detection community definito
-        self.numMedioClusters=None
-        # Granezza media dei Clusters trovati usando l'algoritmo di detection community definito
-        self.sizeMedioClusters=None
 
 
     def builtModel(self,spEnv,directory):
@@ -153,31 +147,24 @@ class SocialBased(ItemBased):
         return user_id,sorted(scored_items,key=operator.itemgetter(0),reverse=True)
 
     def createFriendsCommunities(self):
-        if not os.path.exists(dirPathCommunities+self.communityType):
-            print("\nCreazione del grafo delle amicizie per i vari utenti con algoritmo scelto!")
+        if not os.path.exists(userFriendsGraph):
+            print("\nCreazione del grafo delle amicizie!")
             # Creazione del dizionario delle amicizie
             self.createDizFriendships()
-            # Ciclo su tutti gli utenti
-            count=0
-            listInfoUsersClusters=[]
-            for user in self.friendships.keys():
-                # Creazione Grafo delle amicizie
-                self.createGraph(user)
-                if len(self.g.es)>0 and len(self.g.vs)>0:
-                    count+=1
-                    # Calcolo le communities delle amicizie
-                    numClusters,sizeClusters=self.createCommunities(user)
-                    # Per ogni utente memorizzo il numero di Clusters di amici rilevati e la grandezza media riscontrata
-                    listInfoUsersClusters.append((numClusters,mean(sizeClusters)))
-            self.setNumUtentiWithClusters(count)
-            self.setNumMedioClusters(mean(list(zip(*listInfoUsersClusters))[0]))
-            self.setSizeMedioClusters(mean(list(zip(*listInfoUsersClusters))[1]))
-            print("\n\nzNumero di utenti per i quali è presente almeno 1 community: {}".format(self.numUtentiWithClusters))
-            print("Numero medio di clusters presenti: {}".format(self.numMedioClusters))
-            print("Grandezza media dei clusters presenti: {}".format(self.sizeMedioClusters))
-
+            # Creazione Grafo delle amicizie
+            self.createGraph()
         else:
-            print("\nLe communities di amici per i vari utenti sono già presenti!")
+            print("\nIl grafo delle amicizie è già presente!")
+
+        if self.communityType!="all":
+            if not os.path.exists(dirPathCommunities+"/"+self.communityType+"/communitiesFriends.json"):
+                # Calcolo le communities delle amicizie
+                self.createCommunities()
+            else:
+                print("\nIl file delle communities dell'algoritmo scelto è già presente!")
+        else:
+            print("\nHo deciso di trovare le communities per tutti i vari algoritmi!")
+            self.createCommunities()
 
     def createDizFriendships(self):
         def createPairs(user,listFriends):
@@ -203,18 +190,6 @@ class SocialBased(ItemBased):
 
         friendships={user:createListFriendsDoubleWeight(user,dizFriendshipsDouble) for user in dizFriendshipsDouble}
 
-        # """ Per ogni arco (user1-user2) vado ad eliminare la controparte (user2-user1) """
-        # archi=set()
-        # for user,listFriends in dizFriendshipsDoubleWeight.items():
-        #     for elem in listFriends:
-        #         if (user,elem[0],elem[1]) not in archi and (elem[0],user,elem[1]) not in archi:
-        #             archi.add((user,elem[0],elem[1]))
-        #
-        # """ Costruisco il dizionario finale da salvare """
-        # friendships=defaultdict(list)
-        # for k,v,r in archi:
-        #     friendships[k].append((v,r))
-
         print("\nNumero di AMICIZIE (doppie) presenti sono: {}".format(sum([len(lista) for lista in friendships.values()])))
         # numUtenti=len(set([user for user in friendships]).union(set([user for lista in friendships.values() for user,_ in lista])))
         numUtenti=len(list(friendships.keys()))
@@ -222,51 +197,37 @@ class SocialBased(ItemBased):
         self.setFriendships(friendships)
         print("\nDizionario delle amicizie pesato creato e settato!")
 
-    def createGraph(self,user):
+    def createGraph(self):
         def saveGraphs(g):
-            if not os.path.exists(userFriendsGraph):
-                os.makedirs(userFriendsGraph)
-            g.write_graphml(f=open(userFriendsGraph+"/"+user+".graphml","wb"))
+            g.write_pickle(fname=open(userFriendsGraph,"wb"))
+            g.write_graphml(f=open(userFriendsGraph+".graphml","wb"))
 
         g=Graph()
         """ Creo i nodi (utenti) del grafo """
-        friends=list(zip(*self.friendships[user]))[0]
+        users={user for user in self.friendships.keys()}
+        for user in users:
+            g.add_vertex(name=user,gender="user",label=user)
+
+        def createPairs(user,listItems):
+            return [(user,item[0],item[1]) for item in listItems]
 
         """ Creo gli archi (amicizie) del grafo SINGOLE """
-        print("\n\nUser: {}".format(user))
-        # print("\nself.friendships[user] LUNGH: {}: {}".format(len(self.friendships[user]),self.friendships[user]))
-        archi=set()
-        nodi=set()
-        # Ciclo su tutti gli amici dell'utente
-        for friend in friends:
-            # Ciclo sugli amici degli amici dell'utente
-            for friend_friend,valSim_friendFriend in self.friendships[friend]:
-                # Controllo che l'amico dell'amico si anche un amico dell'utente, non sia l'utente in questione e non sia già presente l'arco
-                if friend_friend in friends and (friend_friend,friend,valSim_friendFriend) not in archi and friend_friend!=user:
-                    # Aggiungo l'arco
-                    archi.add((friend,friend_friend,valSim_friendFriend))
-                    # Aggiungo i due nodi (amici) se non ancora presenti
-                    if friend_friend not in nodi:
-                        nodi.add(friend_friend)
-                        g.add_vertex(name=friend_friend,gender="user",label=friend_friend)
-                    if friend not in nodi:
-                        nodi.add(friend)
-                        g.add_vertex(name=friend,gender="user",label=friend)
-
-        print("Num Archi: {} ".format(len(archi)))
-        print("Num Nodi: {} ".format(len(nodi)))
-
-        for friend,friend_friend,weight in archi:
-            g.add_edge(friend,friend_friend,weight=weight)
+        listaList=[createPairs(user,listItems) for user,listItems in self.friendships.items()]
+        archi=[]
+        for lista in listaList:
+            for user,friend,weight in lista:
+                if (friend,user,weight) not in archi:
+                    archi.append((user,friend,weight))
+                    g.add_edge(user,friend,weight=weight)
 
         saveGraphs(g)
-        self.g=g
-        # print("\nGRAFO: {}".format(self.g))
-        # print("\nGrafo delle amicizie creato per user:".format(user))
+        print("\nSummary:\n{}".format(summary(g)))
+        print("\nGrafo delle amicizie creato e salvato!")
 
-    def createCommunities(self,utente):
+
+    def createCommunities(self):
         startTime=time.time()
-        g=self.g
+        g=Graph.Read_Pickle(fname=open(userFriendsGraph,"rb"))
         # calculate dendrogram
         dendrogram=None
         clusters=None
@@ -276,34 +237,31 @@ class SocialBased(ItemBased):
             types=[self.communityType]
 
         for type in types:
-            if type=="fastgreedy":
-                dendrogram=g.community_fastgreedy(weights="weight")
-            elif type=="walktrap":
-                dendrogram=g.community_walktrap(weights="weight")
-            elif type=="label_propagation":
-                clusters=g.community_label_propagation(weights="weight")
-            elif type=="multilevel":
-                clusters=g.community_multilevel(weights="weight",return_levels=False)
-            elif type=="infomap":
-                clusters=g.community_infomap(edge_weights="weight")
+            if not os.path.exists(dirPathCommunities+"/"+type+"/communitiesFriends.json"):
+                if type=="fastgreedy":
+                    dendrogram=g.community_fastgreedy(weights="weight")
+                elif type=="walktrap":
+                    dendrogram=g.community_walktrap(weights="weight")
+                elif type=="label_propagation":
+                    clusters=g.community_label_propagation(weights="weight")
+                elif type=="multilevel":
+                    clusters=g.community_multilevel(weights="weight",return_levels=False)
+                elif type=="infomap":
+                    clusters=g.community_infomap(edge_weights="weight")
 
-            # convert it into a flat clustering (VertexClustering)
-            if type!="label_propagation" and type!="multilevel" and type!="infomap":
-                clusters = dendrogram.as_clustering()
+                # convert it into a flat clustering (VertexClustering)
+                if type!="label_propagation" and type!="multilevel" and type!="infomap":
+                    clusters = dendrogram.as_clustering()
+                # get the membership vector
+                membership = clusters.membership
+                communitiesFriends=defaultdict(list)
+                for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
+                    communitiesFriends[community].append(user)
+                saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/communitiesFriends.json")
+                print("\nClustering Summary for '{}' : \n{}".format(type,clusters.summary()))
 
-            # Aggiungo grandezza di ogni singolo clusters
-            sizeClusters=[]
-            for cluster in clusters:
-                sizeClusters.append(len(cluster))
+        print("\nFinito di calcolare le communities!")
 
-            # get the membership vector
-            membership = clusters.membership
-            communitiesFriends=defaultdict(list)
-            for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
-                communitiesFriends[community].append(user)
-            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/"+str(utente)+".json")
-            print("Clustering Summary for '{}' : \n{}".format(type,clusters.summary()))
-            return len(clusters),sizeClusters
 
     def setFriendships(self,friendships):
         self.friendships=friendships
@@ -317,11 +275,8 @@ class SocialBased(ItemBased):
     def setCommunityType(self,type):
         self.communityType=type
 
-    def setNumMedioClusters(self, numMedioClusters):
-        self.numMedioClusters=numMedioClusters
 
-    def setSizeMedioClusters(self, sizeMedioClusters):
-        self.sizeMedioClusters=sizeMedioClusters
 
-    def setNumUtentiWithClusters(self, numUtentiWithClusters):
-        self.numUtentiWithClusters=numUtentiWithClusters
+
+
+

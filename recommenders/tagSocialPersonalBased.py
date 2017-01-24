@@ -1,19 +1,31 @@
-import json
-import os
-from statistics import mean
-from conf.confDirFiles import dirPathCommunities, dirPathInput, userTagJSON
-from conf.confItemBased import weightSim
-from recommenders.tagSocialImpersonalBased import TagSocialImpersonalBased
+import operator
 
 __author__ = 'maury'
 
+from collections import defaultdict
+import json
+import os
+from statistics import mean
+from igraph import Graph
+import time
+
 from recommenders.socialBased import SocialBased
 from recommenders.tagBased import TagBased
-
+from conf.confCommunitiesFriends import communitiesTypes, communityType
+from conf.confDirFiles import dirPathCommunities, dirPathInput, userTagJSON, userFriendsGraph
+from conf.confItemBased import weightSim
+from recommenders.tagSocialImpersonalBased import TagSocialImpersonalBased
+from tools.tools import saveJsonData
 
 class TagSocialPersonalBased(SocialBased,TagBased):
     def __init__(self,name,friendships,communityType):
         SocialBased.__init__(self,name,friendships,communityType)
+        # Numero di utenti che presentano almeno 1 clusers di utenti
+        self.numUtentiWithClusters=None
+        # Numero medio dei Clusters trovati usando l'algoritmo di detection community definito
+        self.numMedioClusters=None
+        # Granezza media dei Clusters trovati usando l'algoritmo di detection community definito
+        self.sizeMedioClusters=None
 
     def builtModel(self,spEnv,directory):
         """
@@ -74,13 +86,19 @@ class TagSocialPersonalBased(SocialBased,TagBased):
 
 
         """
-        Creazione RDD delle somiglianze finale che tiene conto dei due RDD (Senza filtro Neighbors su TAGS)
+        Per ogni utente creazione dei files che modellano le varie Communities come un vettore di Varianze associate ognuna ad una determinata categoria/tag
+        """
+        comm_tagVar=spEnv.getSc().textFile(dirPathCommunities+"/"+communityType)
+
+
+        """
+        Creazione RDD delle somiglianze che tiene conto dei due RDD (Senza filtro Neighbors su TAGS)
         """
         # Modifica dell'RDD relativo ai TAGS
         user_simsTags=user_simsTags.mapValues(lambda x: TagSocialImpersonalBased.RemoveTags(x))
         # print("\nSemplificato RDD_TAGS Somiglianze!")
         nNeigh=self.nNeigh
-        user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialImpersonalBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialImpersonalBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialImpersonalBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
+        user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialPersonalBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialImpersonalBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialPersonalBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
         print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
         print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
 
@@ -90,10 +108,56 @@ class TagSocialPersonalBased(SocialBased,TagBased):
         user_item_hist=user_item_pair.collectAsMap()
         userHistoryRates=spEnv.getSc().broadcast(user_item_hist)
         # Calcolo per ogni utente la lista di TUTTI gli items suggeriti ordinati secondo predizione. Ritorno un pairRDD del tipo (user,[(scorePred,item),(scorePred,item),...])
-        user_item_recs = user_simsTot.map(lambda p: TagSocialImpersonalBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagSocialImpersonalBased.convertFloat_Int(p[0],p[1])).collectAsMap()
+        user_item_recs = user_simsTot.map(lambda p: TagSocialPersonalBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagSocialPersonalBased.convertFloat_Int(p[0],p[1])).collectAsMap()
         # Immagazzino la lista dei suggerimenti finali prodotti per sottoporla poi a valutazione
         self.setDictRec(user_item_recs)
         # print("\nLista suggerimenti: {}".format(self.dictRec))
+
+    @staticmethod
+    def recommendationsUserBasedSocial(user_id,users_with_sim,userHistoryRates,user_meanRates):
+        """
+        Per ogni utente ritorno una lista (personalizzata) di items sugeriti in ordine di rate.
+        N.B: Per alcuni user non sarà possibile raccomandare alcun item -> Lista vuota
+        Versione che tiene conto solamente dei valori di somiglianza derivanti dagli amici dell'active user
+        :param user_id: utente per il quale rilasciare la lista di raccomandazioni
+        :param users_with_sim: Lista di elementi del tipo [(user,valSim),(user,ValSim),...]
+        :param userHistoryRates: Dizionario del tipo user:[(item,score),(item,score),...]
+        :param user_meanRates: Dizionario che per ogni utente contiene valore Medio Rating
+        :return:
+        """
+        def mapCommTag():
+            pass
+
+        def updateSimUsers(dictCommTag):
+            pass
+
+        # Vado ad associare ad ogni community dell'utente utente il corrispondete tag/categoria di business che più rappresenta l'interesse di quegli amici
+        dictCommTag=mapCommTag()
+
+        # Modifico la lista dei vicini dell'utente inserendo in cima gli amici della community che possiedono un interesse in comune
+        updateSimUsers(dictCommTag)
+
+        # Dal momento che ogni item potrà essere il vicino di più di un item votato dall'utente dovrò aggiornare di volta in volta i valori
+        totals = defaultdict(int)
+        sim_sums = defaultdict(int)
+        # Ciclo su tutti i vicini dell'utente
+        for (vicino,sim) in users_with_sim:
+            # Recupero tutti i rates dati dal tale vicino dell'utente
+            listRatings = userHistoryRates.get(vicino)
+            if listRatings:
+                # Ciclo su tutti i Rates
+                for (item,rate) in listRatings:
+                    # Aggiorno il valore di rate e somiglianza per l'item preso in considerazione
+                    totals[item] += sim * (rate-user_meanRates.get(vicino))
+                    sim_sums[item] += abs(sim)
+        """
+            Rilascio una lista di suggerimenti composta da tutti gli items votati dagli amici dell'active user appartenenti alla stessa community
+        """
+        # Creo la lista dei rates normalizzati associati agli items per ogni user
+        scored_items = [(user_meanRates.get(user_id)+(total/sim_sums[item]),item) for item,total in totals.items()]
+        # Ordino la lista secondo il valore dei rates
+        return user_id,sorted(scored_items,key=operator.itemgetter(0),reverse=True)
+
 
     @staticmethod
     def RemoveTags(listPairs):
@@ -121,18 +185,17 @@ class TagSocialPersonalBased(SocialBased,TagBased):
         return lista
 
 
-    @staticmethod
-    def filterSimilarities(user_id,users_and_sims):
-        """
-        Rimuovo tutti quei vicini per i quali il valore di somiglianza è < 0.5
-        :param user_id: Item preso in considerazione
-        :param users_and_sims: Items e associati valori di somiglianze per l'item sotto osservazione
-        :return: Ritorno un nuovo pairRDD filtrato
-        """
-        lista=[item for item in users_and_sims if item[1]>=0.5]
-        if len(lista)>0:
-            return user_id,lista
-
+    # @staticmethod
+    # def filterSimilarities(user_id,users_and_sims):
+    #     """
+    #     Rimuovo tutti quei vicini per i quali il valore di somiglianza è < 0.5
+    #     :param user_id: Item preso in considerazione
+    #     :param users_and_sims: Items e associati valori di somiglianze per l'item sotto osservazione
+    #     :return: Ritorno un nuovo pairRDD filtrato
+    #     """
+    #     lista=[item for item in users_and_sims if item[1]>=0.5]
+    #     if len(lista)>0:
+    #         return user_id,lista
 
     def createFriendsCommunities(self):
         if not os.path.exists(dirPathCommunities+self.communityType):
@@ -144,11 +207,11 @@ class TagSocialPersonalBased(SocialBased,TagBased):
             listInfoUsersClusters=[]
             for user in self.friendships.keys():
                 # Creazione Grafo delle amicizie
-                self.createGraph(user)
+                self.createGraphFriendships(user)
                 if len(self.g.es)>0 and len(self.g.vs)>0:
                     count+=1
                     # Calcolo le communities delle amicizie
-                    numClusters,sizeClusters=self.createCommunities(user)
+                    numClusters,sizeClusters=self.createCommunitiesFriendships(user)
                     # Per ogni utente memorizzo il numero di Clusters di amici rilevati e la grandezza media riscontrata
                     listInfoUsersClusters.append((numClusters,mean(sizeClusters)))
             self.setNumUtentiWithClusters(count)
@@ -158,5 +221,99 @@ class TagSocialPersonalBased(SocialBased,TagBased):
             print("Numero medio di clusters presenti: {}".format(self.numMedioClusters))
             print("Grandezza media dei clusters presenti: {}".format(self.sizeMedioClusters))
 
-    def createCommHomofily(self):
-        pass
+        else:
+            print("\nLe communities di amici per i vari utenti sono già presenti!")
+
+
+    def createGraphFriendships(self,user):
+        def saveGraphs(g):
+            if not os.path.exists(userFriendsGraph):
+                os.makedirs(userFriendsGraph)
+            g.write_graphml(f=open(userFriendsGraph+"/"+user+".graphml","wb"))
+
+        g=Graph()
+        """ Creo i nodi (utenti) del grafo """
+        friends=list(zip(*self.friendships[user]))[0]
+
+        """ Creo gli archi (amicizie) del grafo SINGOLE """
+        print("\n\nUser: {}".format(user))
+        # print("\nself.friendships[user] LUNGH: {}: {}".format(len(self.friendships[user]),self.friendships[user]))
+        archi=set()
+        nodi=set()
+        # Ciclo su tutti gli amici dell'utente
+        for friend in friends:
+            # Ciclo sugli amici degli amici dell'utente
+            for friend_friend,valSim_friendFriend in self.friendships[friend]:
+                # Controllo che l'amico dell'amico si anche un amico dell'utente, non sia l'utente in questione e non sia già presente l'arco
+                if friend_friend in friends and (friend_friend,friend,valSim_friendFriend) not in archi and friend_friend!=user:
+                    # Aggiungo l'arco
+                    archi.add((friend,friend_friend,valSim_friendFriend))
+                    # Aggiungo i due nodi (amici) se non ancora presenti
+                    if friend_friend not in nodi:
+                        nodi.add(friend_friend)
+                        g.add_vertex(name=friend_friend,gender="user",label=friend_friend)
+                    if friend not in nodi:
+                        nodi.add(friend)
+                        g.add_vertex(name=friend,gender="user",label=friend)
+
+        print("Num Archi: {} ".format(len(archi)))
+        print("Num Nodi: {} ".format(len(nodi)))
+
+        for friend,friend_friend,weight in archi:
+            g.add_edge(friend,friend_friend,weight=weight)
+
+        saveGraphs(g)
+        self.g=g
+        # print("\nGRAFO: {}".format(self.g))
+        # print("\nGrafo delle amicizie creato per user:".format(user))
+
+    def createCommunitiesFriendships(self,utente):
+        startTime=time.time()
+        g=self.g
+        # calculate dendrogram
+        dendrogram=None
+        clusters=None
+        if self.communityType=="all":
+            types=communitiesTypes
+        else:
+            types=[self.communityType]
+
+        for type in types:
+            if type=="fastgreedy":
+                dendrogram=g.community_fastgreedy(weights="weight")
+            elif type=="walktrap":
+                dendrogram=g.community_walktrap(weights="weight")
+            elif type=="label_propagation":
+                clusters=g.community_label_propagation(weights="weight")
+            elif type=="multilevel":
+                clusters=g.community_multilevel(weights="weight",return_levels=False)
+            elif type=="infomap":
+                clusters=g.community_infomap(edge_weights="weight")
+
+            # convert it into a flat clustering (VertexClustering)
+            if type!="label_propagation" and type!="multilevel" and type!="infomap":
+                clusters = dendrogram.as_clustering()
+
+            # Aggiungo grandezza di ogni singolo clusters
+            sizeClusters=[]
+            for cluster in clusters:
+                sizeClusters.append(len(cluster))
+
+            # get the membership vector
+            membership = clusters.membership
+            communitiesFriends=defaultdict(list)
+            for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
+                communitiesFriends[community].append(user)
+            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/"+str(utente)+".json")
+            print("Clustering Summary for '{}' : \n{}".format(type,clusters.summary()))
+            return len(clusters),sizeClusters
+
+
+    def setNumMedioClusters(self, numMedioClusters):
+        self.numMedioClusters=numMedioClusters
+
+    def setSizeMedioClusters(self, sizeMedioClusters):
+        self.sizeMedioClusters=sizeMedioClusters
+
+    def setNumUtentiWithClusters(self, numUtentiWithClusters):
+        self.numUtentiWithClusters=numUtentiWithClusters
