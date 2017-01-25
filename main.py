@@ -63,7 +63,7 @@ if __name__ == '__main__':
     elif typeRecommender=="TagSocialPersonalBased":
         friendships=analyzer.retrieveFriends()
         rs=TagSocialPersonalBased(name="TagSocialPersonalBased",friendships=friendships,communityType=communityType)
-        # Creazione del file che per ogni utente stabilisce le community di amici
+        # Creazione dei files che per ogni utente stabilisce le community di amici
         rs.createFriendsCommunities()
 
 

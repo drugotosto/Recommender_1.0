@@ -1,14 +1,11 @@
-import os
-from conf.confItemBased import weightSim
-from recommenders.tagBased import TagBased
-
 __author__ = 'maury'
 
 import json
+import os
 
+from conf.confItemBased import weightSim
+from recommenders.tagBased import TagBased
 from recommenders.socialBased import SocialBased
-from recommenders.itemBased import ItemBased
-from conf.confCommunitiesFriends import fileFriendsCommunities
 from conf.confDirFiles import userTagJSON, dirPathInput, dirPathCommunities
 
 
@@ -82,6 +79,7 @@ class TagSocialImpersonalBased(SocialBased,TagBased):
         # print("\nSemplificato RDD_TAGS Somiglianze!")
         nNeigh=self.nNeigh
         user_simsTot=user_simsTags.union(user_simsFriends).reduceByKey(lambda listPair1,listPair2: TagSocialImpersonalBased.joinPairs(listPair1,listPair2)).map(lambda p: TagSocialImpersonalBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: TagSocialImpersonalBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
+
         print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
         print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
 
@@ -122,14 +120,14 @@ class TagSocialImpersonalBased(SocialBased,TagBased):
         return lista
 
 
-    # @staticmethod
-    # def filterSimilarities(user_id,users_and_sims):
-    #     """
-    #     Rimuovo tutti quei vicini per i quali il valore di somiglianza è < 0.5
-    #     :param user_id: Item preso in considerazione
-    #     :param users_and_sims: Items e associati valori di somiglianze per l'item sotto osservazione
-    #     :return: Ritorno un nuovo pairRDD filtrato
-    #     """
-    #     lista=[item for item in users_and_sims if item[1]>=0.5]
-    #     if len(lista)>0:
-    #         return user_id,lista
+    @staticmethod
+    def filterSimilarities(user_id,users_and_sims):
+        """
+        Rimuovo tutti quei vicini per i quali il valore di somiglianza è < 0.5
+        :param user_id: Item preso in considerazione
+        :param users_and_sims: Items e associati valori di somiglianze per l'item sotto osservazione
+        :return: Ritorno un nuovo pairRDD filtrato
+        """
+        lista=[item for item in users_and_sims if item[1]>=0.5]
+        if len(lista)>0:
+            return user_id,lista

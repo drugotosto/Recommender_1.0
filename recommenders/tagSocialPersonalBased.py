@@ -1,14 +1,17 @@
-import operator
 
 __author__ = 'maury'
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 import json
 import os
 from statistics import mean
 from igraph import Graph
 import time
+import operator
+import math
+import numpy as np
 
+from tools.sparkEnvLocal import SparkEnvLocal
 from recommenders.socialBased import SocialBased
 from recommenders.tagBased import TagBased
 from conf.confCommunitiesFriends import communitiesTypes, communityType
@@ -84,11 +87,12 @@ class TagSocialPersonalBased(SocialBased,TagBased):
         #     print("\nUser : {}".format(user))
         #     print("User - PairVal :{}".format(list(user_valPairs)))
 
-
         """
         Per ogni utente creazione dei files che modellano le varie Communities come un vettore di Varianze associate ognuna ad una determinata categoria/tag
         """
-        comm_tagVar=spEnv.getSc().textFile(dirPathCommunities+"/"+communityType)
+        for filename in os.listdir(dirPathCommunities+"/"+communityType):
+            users=spEnv.getSc().textFile(filename).values().flatMap(lambda listUser: listUser).collect()
+            print("\n\nUSERS: {}")
 
 
         """
@@ -184,19 +188,6 @@ class TagSocialPersonalBased(SocialBased,TagBased):
             lista.append((pair1[0],valSim))
         return lista
 
-
-    # @staticmethod
-    # def filterSimilarities(user_id,users_and_sims):
-    #     """
-    #     Rimuovo tutti quei vicini per i quali il valore di somiglianza è < 0.5
-    #     :param user_id: Item preso in considerazione
-    #     :param users_and_sims: Items e associati valori di somiglianze per l'item sotto osservazione
-    #     :return: Ritorno un nuovo pairRDD filtrato
-    #     """
-    #     lista=[item for item in users_and_sims if item[1]>=0.5]
-    #     if len(lista)>0:
-    #         return user_id,lista
-
     def createFriendsCommunities(self):
         if not os.path.exists(dirPathCommunities+self.communityType):
             print("\nCreazione del grafo delle amicizie per i vari utenti con algoritmo scelto!")
@@ -229,7 +220,7 @@ class TagSocialPersonalBased(SocialBased,TagBased):
         def saveGraphs(g):
             if not os.path.exists(userFriendsGraph):
                 os.makedirs(userFriendsGraph)
-            g.write_graphml(f=open(userFriendsGraph+"/"+user+".graphml","wb"))
+            g.write_graphml(f=open(userFriendsGraph+"/"+str(user).strip("_")+".graphml","wb"))
 
         g=Graph()
         """ Creo i nodi (utenti) del grafo """
@@ -304,7 +295,7 @@ class TagSocialPersonalBased(SocialBased,TagBased):
             communitiesFriends=defaultdict(list)
             for user,community in [(name,membership) for name, membership in zip(g.vs["name"], membership)]:
                 communitiesFriends[community].append(user)
-            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/"+str(utente)+".json")
+            saveJsonData(communitiesFriends.items(),dirPathCommunities+"/"+type,dirPathCommunities+"/"+type+"/"+str(user).strip("_")+".json")
             print("Clustering Summary for '{}' : \n{}".format(type,clusters.summary()))
             return len(clusters),sizeClusters
 
@@ -317,3 +308,68 @@ class TagSocialPersonalBased(SocialBased,TagBased):
 
     def setNumUtentiWithClusters(self, numUtentiWithClusters):
         self.numUtentiWithClusters=numUtentiWithClusters
+
+    @staticmethod
+    def mappingUser(userList,dictUser_TagsScores):
+        """
+        Ogni user che appartiene alla lista lo sostiuisco con la lista [(tag1,score),(tag2,score),...] a lui associata
+        :param userList: lista di utenti
+        :param dictUser_TagsScores: dizionario che per ogni user associa la lista [(tag1,score),(tag2,score),...]
+        :return:
+        """
+        lista=[]
+        for user in userList:
+            lista.extend(dictUser_TagsScores[user])
+        return lista
+
+    @staticmethod
+    def joinTags(listTagScore):
+        """
+        Data la lista di pair del tipo (tag,score) dove il tag si può ripetere, restituisco una lista in cui il tag non si ripete e i valori sono stati messi insieme
+        :param listTagScore: lista del tipo [(tag1,score),(tag2,score),(tag1,score),...]
+        :return: lista del tipo [(tag1,[score1,score2,..]),(tag2,[score1,score2,..]),...]
+        """
+        dictTags=defaultdict(list)
+        for tag,score in listTagScore:
+            dictTags[tag].append(score)
+        return list(dictTags.items())
+
+    @staticmethod
+    def computeVariances(comm,tag_listScores,dictCommNpers):
+        # print("\nNumero persone community: {}".format(dictCommNpers[comm]))
+        # print("\nNumero persone Tags: {}".format([len(listScores) for _,listScores in tag_listScores]))
+        for tag,listScores in tag_listScores:
+            val=(mean(np.power(listScores,2))-math.pow(mean(listScores),2))*(dictCommNpers[comm]/len(listScores))
+            if val>0.0:
+                lista.append((tag,val))
+        return (comm,lista)
+
+if __name__ == '__main__':
+    spEnv=SparkEnvLocal()
+    # Ciclo su tutti i files dei vari utenti che contengono le communities di amici
+    for filename in os.listdir(dirPathCommunities+"/"+communityType):
+        if os.path.exists(dirPathCommunities+"/"+communityType+"/"+filename):
+            print("\n\nFILE: {}".format(filename))
+            # Creazione del dizionario che associa per ogni community il numero di persone che ne fanno parte
+            dictCommNpers={json.loads(line)[0]: len(json.loads(line)[1]) for line in open(dirPathCommunities+"/"+communityType+"/"+filename)}
+
+            # Colleziono i vari utenti/amici che appartengono alle diverse communities
+            users=spEnv.getSc().textFile(dirPathCommunities+"/"+communityType+"/"+filename).map(lambda x: json.loads(x)).values().flatMap(lambda x: x).collect()
+            # print("\n\nUsers: {}".format(users))
+            # Creo il relativo dizionario che per ogni utente associa una lista di coppie (tag,score)
+            user_TagsScores=spEnv.getSc().textFile(userTagJSON).map(lambda line: TagBased.parseFileUser(line)).groupByKey().filter(lambda userListPairs: userListPairs[0] in users).collectAsMap()
+            dictUser_TagsScores=spEnv.getSc().broadcast(user_TagsScores)
+            # print("DICT: {}".format(user_TagsScores))
+
+            comm_TagsListScores=spEnv.getSc().textFile(dirPathCommunities+"/"+communityType+"/"+filename).map(lambda x: json.loads(x)).mapValues(lambda userList: TagSocialPersonalBased.mappingUser(userList,dictUser_TagsScores.value)).mapValues(lambda listTagScore: TagSocialPersonalBased.joinTags(listTagScore))
+            for comm,lista in comm_TagsListScores.collect():
+                print("\nCOMM:{}".format(comm))
+                print("LISTA: {}".format(lista))
+
+            comm_TagsVars=comm_TagsListScores.map(lambda x: TagSocialPersonalBased.computeVariances(x[0],x[1],dictCommNpers)).collect()
+            for comm,lista in comm_TagsVars:
+                print("\nCOMM:{}".format(comm))
+                print("LISTA: {}".format(lista))
+                minimo=list(zip(*lista))[1]
+                print("MINIMO: "+str(minimo))
+
