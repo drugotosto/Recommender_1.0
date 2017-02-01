@@ -10,7 +10,7 @@ class Evaluator:
         # Dizionario che rappresenta i dati che compongono il TestSet (verrà settato più avanti)
         self.test_ratings=None
         # Risultati derivanti dalla valutazione medie delle diverse metriche utilizzate sui folds
-        self.dataEval={"nTestRates":[],"nPredPers":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
+        self.dataEval={"nTestRates":[],"hits":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
 
 
     def computeEvaluation(self,dictRec,analyzer):
@@ -25,7 +25,7 @@ class Evaluator:
         listMAEfold=[]
         listRMSEfold=[]
         # Numero di predizioni personalizzate che si è stati in grado di fare su tutto il fold
-        nPredPers=0
+        hits=0
         nUserPers=0
         # Ciclo su ogni user del test per recuperare la lista di Predizioni da testare: lista di coppie [(ratePred,rateTest)...]
         for userTest,ratingsTest in self.test_ratings.items():
@@ -46,7 +46,7 @@ class Evaluator:
                         # Aggiungo la coppia (ScorePredetto,ScoreReale) utilizzata per MAE,RMSE
                         pairsRatesPers.append((predRates[items.index(item)],rate))
                         # Tenendo conto di tutta la lista dei suggerimenti vedo se l'item votato realmente dall'active user risulta presente
-                        nPredPers+=1
+                        hits+=1
 
                     # Controllo se l'item risulta essere rilevante
                     if rate>=3:
@@ -79,7 +79,7 @@ class Evaluator:
         print("\nSpazio MEMORIA: {}".format(deep_getsizeof(dictBusCat,set())))
         """
         # Registro le valutazioni appena calcolare per il fold preso in considerazione
-        self.appendMisuresFold(nPredPers,listMAEfold,listRMSEfold,recalls,precisions,percUsers,percMedioBus)
+        self.appendMisuresFold(hits,listMAEfold,listRMSEfold,recalls,precisions,percUsers,percMedioBus)
 
 
     def computeCoverage(self,analyzer,dictRec,nUserPers):
@@ -98,10 +98,10 @@ class Evaluator:
         percMedioBus=mean(dictUserPercBus.values())
         return percUsers,percMedioBus
 
-    def appendMisuresFold(self,nPredPers,listMAEfold,listRMSEfold,recalls,precisions,percUsers,percMedioBus):
+    def appendMisuresFold(self,hits,listMAEfold,listRMSEfold,recalls,precisions,percUsers,percMedioBus):
         """
         Aggiungo per ogni fold i valori delle diverse metriche calcolate
-        :param nPredPers: Numero delle predizioni personalizzate che sono stato in grado di eseguire
+        :param hits: Numero delle predizioni personalizzate che sono stato in grado di eseguire
         :param listMAEfold: Media sugli utenti del fold del MAE
         :param listRMSEfold: Media sugli utenti del fold del RSME
         :param recalls: Media sugli utenti del Fold del valore di RECALL
@@ -109,7 +109,7 @@ class Evaluator:
         :param percUsers: Percentuale di utenti sul fold che hanno avuto una lista dei suggerimenti non vuota
         :param percMedioBus: Copertura media in percentuale (considerando tutti fli utenti del fold) del catalogo degli items
         """
-        self.dataEval["nPredPers"].append(nPredPers)
+        self.dataEval["hits"].append(hits)
         # Calcolo del valore medio di MAE,RMSE sui vari utenti appartenenti al fold
         # print("MAE (personalizzato) medio fold: {}".format(mean(listMAEfold)))
         self.dataEval["mae"].append(mean(listMAEfold))
@@ -120,9 +120,10 @@ class Evaluator:
         self.dataEval["recall"].append(mean(recalls))
         # print("MEAN PRECISION: {}".format(mean(precisions)))
         self.dataEval["precision"].append(mean(precisions))
-        f1=(2*mean(recalls)*mean(precisions))/(mean(recalls)+mean(precisions))
-        # print("F1 FOLD: {}".format(f1))
-        self.dataEval["f1"].append(f1)
+        if mean(recalls)!=0 or mean(precisions)!=0:
+            self.dataEval["f1"].append((2*mean(recalls)*mean(precisions))/(mean(recalls)+mean(precisions)))
+        else:
+            self.dataEval["f1"].append(0)
         # print("\nAl {} % di Users riusciamo a fornire dei suggerimenti per 'mediamente' il {} % dei Business totali".format(percUsers,percMedioBus))
         self.dataEval["covMedioBus"].append(percMedioBus)
         self.dataEval["covUsers"].append(percUsers)

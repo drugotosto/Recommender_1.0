@@ -128,6 +128,20 @@ class Recommender:
         self.evaluator.appendNtestRates(nTestRates)
         self.evaluator.setNumTestUsers(len(usersTest))
 
+    def retrieveTrainData(self,directory):
+        """
+        # Costruisco e setto un dizionario {user : [(item,rate),(item,rate),...] dai dati del TrainSet
+        :param directory: Fold che contiene un insieme di file i quali contengono per ogni riga user,business,score
+        """
+        files=[file for file in listdir(directory) if file.startswith("part-")]
+        ratings=defaultdict(dict)
+        for fileName in files:
+            with open(directory+"/"+fileName) as f:
+                for line in f.readlines():
+                    jsonLine=json.loads(line)
+                    ratings[jsonLine[0]][jsonLine[1]]=jsonLine[2]
+        return ratings
+
     def getName(self):
         return str(self.name)
 

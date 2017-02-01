@@ -43,7 +43,7 @@ def convertJsonToCSV(fileJson):
     row = json.load(open(fileJson,"r"))
     print(row)
     with open('fileJson2.csv', 'w') as f:
-        dict_writer = csv.DictWriter(f, fieldnames=["nTestRates","nPredPers","mae","rmse","precision","recall","f1","covUsers","covMedioBus"])
+        dict_writer = csv.DictWriter(f, fieldnames=["nTestRates","hits","mae","rmse","precision","recall","f1","covUsers","covMedioBus"])
         dict_writer.writeheader()
         dict_writer.writerow(row)
 

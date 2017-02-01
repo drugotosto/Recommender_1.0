@@ -85,9 +85,9 @@ class ItemBased(Recommender):
 
         # Costruisco un pairRDD del tipo (item,[(item1,(val_sim1,{user,user,..})),(item1,(val_sim1,{user,user,..})),...]) ordinato dove i valori di somiglianza sono calcolati in base alla misura scelta e pesati in base al numero di Users in comune
         item_simsWeight=None
-        if self.typeSimilarity=="Pearson":
+        if self.typeSimilarity=="pearson":
             item_simsWeight = pairwise_items.map(lambda p: ItemBased.pearsonSimilarity(p[0],p[1],dictItem_meanRates)).map(lambda p: ItemBased.keyOnFirstItem(p[0],p[1])).groupByKey().map(lambda p: ItemBased.computeWeightSim(p[0],p[1],weightSim))
-        elif self.typeSimilarity=="Cosine":
+        elif self.typeSimilarity=="cosine":
             item_simsWeight = pairwise_items.map(lambda p: ItemBased.cosineSimilarity(p[0],p[1])).map(lambda p: ItemBased.keyOnFirstItem(p[0],p[1])).groupByKey().map(lambda p: ItemBased.computeWeightSim(p[0],p[1],weightSim))
         print("\nFinito di calcolare le somiglianze!")
         return item_simsWeight

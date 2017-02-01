@@ -15,8 +15,10 @@ from tools.sparkEnvLocal import SparkEnvLocal
 from tools.dataSetAnalyzer import DataScienceAnalyzer
 from recommenders.socialBased import SocialBased
 from recommenders.tagBased import TagBased
-from conf.confCommunitiesFriends import communityType, communitiesTypes
-from recommenders.tagSocialBased import TagSocialBased
+from conf.confCommunitiesFriends import communityType, weightFriendsSim
+from recommenders.socialTagBased import SocialTagBased
+from recommenders.friendsBased import FriendsBased
+from recommenders.friendsTagBased import FriendsTagBased
 
 if __name__ == '__main__':
     startTime=time.time()
@@ -39,24 +41,31 @@ if __name__ == '__main__':
         print("\n******** Il DataSet era già presente! *********")
         analyzer.setProperties(pd.read_pickle(dirPathInput+"dataset"))
         analyzer.printValuesDataset()
-        numFriends=20
+        numFriends=1
         print("Percentuale di utenti con almeno {} amici è: {}".format(numFriends,analyzer.getNumUsersWithFriends(numFriends)/analyzer.getNumUsers()))
         # print("Distribuzione degli Utenti con almeno {} amici è : {}".format(numFriends,analyzer.getDistrFriends(numFriends)))
 
     rs=None
     # Instanzio il tipo di Recommender scelto
     if typeRecommender=="ItemBased":
-        rs=ItemBased(name="ItemBased")
+        rs=ItemBased(name=typeRecommender)
     elif typeRecommender=="TagBased":
-        rs=TagBased(name="TagBased")
-    elif typeRecommender=="SocialBased":
+        rs=TagBased(name=typeRecommender)
+    elif "Social" in typeRecommender:
         friendships=analyzer.retrieveFriends()
-        rs=SocialBased(name="SocialBased",friendships=friendships,communityType=communityType)
+        if typeRecommender=="SocialBased":
+            rs=SocialBased(name=typeRecommender,friendships=friendships,communityType=communityType)
+        elif typeRecommender=="SocialTagBased":
+            rs=SocialTagBased(name=typeRecommender,friendships=friendships,communityType=communityType)
         rs.createFriendsCommunities()
-    elif typeRecommender=="TagSocialBased":
+    elif "Friends" in typeRecommender:
         friendships=analyzer.retrieveFriends()
-        rs=TagSocialBased(name="TagSocialBased",friendships=friendships,communityType=communityType)
-        rs.createFriendsCommunities()
+        if typeRecommender=="FriendsBased":
+            rs=FriendsBased(name=typeRecommender,friendships=friendships)
+        elif typeRecommender=="FriendsTagBased":
+            dictBus_Tags=analyzer.getBusTags()
+            rs=FriendsTagBased(name=typeRecommender,friendships=friendships,dictBus_Tags=dictBus_Tags)
+
 
     if not os.path.exists(dirFolds):
         """ Creazione dei files (trainSetFold_k/testSetFold_k) per ogni prova di valutazione"""
@@ -85,10 +94,15 @@ if __name__ == '__main__':
     """
     Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
     """
-    if not "Social" in rs.getName():
-        fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
-    else:
-        fileName=dirPathOutput+rs.getName()+"/"+communityType+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
+    fileName=None
+    if rs.getName()=="TagBased" or rs.getName()=="ItemBased":
+        fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(weightSim="+str(weightSim)+")"
+    elif rs.getName()=="SocialBased":
+        fileName=dirPathOutput+rs.getName()+"/"+communityType+"_(weightFriendsSim="+str(weightFriendsSim)+")"
+    elif rs.getName()=="SocialTagBased":
+        fileName=dirPathOutput+rs.getName()+"/"+communityType+"_"+typeSimilarity+"_(weightSim="+str(weightSim)+",weightFriendsSim="+str(weightFriendsSim)+")"
+    elif rs.getName()=="FriendsBased" or rs.getName()=="FriendsTagBased":
+        fileName=dirPathOutput+rs.getName()+"/jaccard_(weightFriendsSim="+str(weightFriendsSim)+")"
     printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
     print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
 
@@ -100,7 +114,7 @@ if __name__ == '__main__':
     # if communityType=="all":
     #     for type in communitiesTypes:
     #         fold=0
-    #         rs.evaluator.dataEval={"nTestRates":[],"nPredPers":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
+    #         rs.evaluator.dataEval={"nTestRates":[],"hits":[],"mae":[],"rmse":[],"precision":[],"recall":[],"f1":[],"covUsers":[],"covMedioBus":[]}
     #         rs.setCommunityType(type)
     #         while fold<nFolds:
     #             """ Costruzione del modello a seconda dell'approccio utilizzato """
@@ -118,12 +132,13 @@ if __name__ == '__main__':
     #         """
     #         Salvataggio su file (json) dei risultati finali di valutazione (medie dei valori sui folds)
     #         """
-    #         if not "Social" in rs.getName():
+    #         if rs.getName()=="TagBased":
     #             fileName=dirPathOutput+rs.getName()+"/"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+")"
+    #         elif rs.getName()=="SocialBased":
+    #             fileName=dirPathOutput+rs.getName()+"/"+communityType+"_(nNeigh="+str(nNeigh)+",weightFriendsSim="+str(weightFriendsSim)+")"
     #         else:
-    #             fileName=dirPathOutput+rs.getName()+"/"+type+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+")"
+    #             fileName=dirPathOutput+rs.getName()+"/"+communityType+"_"+typeSimilarity+"_(nNeigh="+str(nNeigh)+",weightSim="+str(weightSim)+",weightFriendsSim="+str(weightFriendsSim)+")"
     #         printRecVal(evaluator=rs.getEvaluator(),directory=dirPathOutput+rs.getName()+"/",fileName=fileName)
     #         print("\nComputazione terminata! Durata totale: {} min.".format((time.time()-startTime)/60))
-
 
 

@@ -44,7 +44,7 @@ class SocialBased(ItemBased):
             # Recupero RDD con l'elenco delle communities associate ognuna ad una lista di utenti di cui ne fanno parte
             comm_listUsers=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/communitiesFriends.json").map(lambda x: json.loads(x))
             # Calcolo del valore di somiglianza tra tutti gli utenti appartenenti alla stessa communities ritorno i primi "N" Amici più simili: (user,[(user,valSim),...])
-            user_simsOrd=self.computeSimilarityFriends(spEnv,comm_listUsers).map(lambda p: SocialBased.nearestFriendsNeighbors(p[0],p[1],nNeigh)).filter(lambda p: p!=None)
+            user_simsOrd=self.computeSimilarityFriends(spEnv,comm_listUsers).map(lambda p: SocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: SocialBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
             user_simsOrd.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/")
         else:
             print("\nLe somiglianze tra friends appartenenti alle stesse communities (trovate dall'algoritmo {}) sono già presenti!".format(self.communityType))
@@ -89,9 +89,11 @@ class SocialBased(ItemBased):
     @staticmethod
     def computeCommunitiesSimilarity(comm,listUsers,friendships,communityType):
         with open(dirPathCommunities+communityType+"/SimilaritiesFiles/communitiesFriendsSim_"+str(comm)+".json","w") as f:
-            """ Ciclo su tutte le possibili combinazioni di users che appartengono alla stessa community """
+            """ Ciclo su tutte le possibili combinazioni di users che appartengono alla stessa community e ne calcolo la Jaccard similarity """
             for user1,user2 in combinations(listUsers,2):
+                # Recupero la lista di amici del primo utente
                 amici_user1=list(zip(*friendships[user1]))[0]
+                # Recupero la lista di amici del secondo utente
                 amici_user2=list(zip(*friendships[user2]))[0]
                 num=len(set(amici_user1+tuple(user1)).intersection(set(amici_user2+tuple(user2))))+1
                 den=len(set(amici_user1+tuple(user1)).union(set(amici_user2+tuple(user2))))+1
@@ -124,7 +126,6 @@ class SocialBased(ItemBased):
         :param user_meanRates: Dizionario che per ogni utente contiene valore Medio Rating
         :return:
         """
-        # Dal momento che ogni item potrà essere il vicino di più di un item votato dall'utente dovrò aggiornare di volta in volta i valori
         totals = defaultdict(int)
         sim_sums = defaultdict(int)
         # Ciclo su tutti i vicini dell'utente
@@ -259,6 +260,18 @@ class SocialBased(ItemBased):
                 print("\nClustering Summary for '{}' : \n{}".format(type,clusters.summary()))
 
         print("\nFinito di calcolare le communities!")
+
+    @staticmethod
+    def filterSimilarities(user_id,users_and_sims):
+        """
+        Rimuovo tutti quei vicini per i quali il valore di somiglianza è < del valore stabilito
+        :param user_id: active user preso in considerazione
+        :param users_and_sims: users e associati valori di somiglianze per l'active user
+        :return: Ritorno un nuovo pairRDD filtrato
+        """
+        lista=[item for item in users_and_sims if item[1]>=weightFriendsSim]
+        if len(lista)>0:
+            return user_id,lista
 
     def setFriendships(self,friendships):
         self.friendships=friendships

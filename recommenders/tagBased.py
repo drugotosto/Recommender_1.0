@@ -91,9 +91,9 @@ class TagBased(ItemBased):
 
         # Costruisco un pairRDD del tipo (user,[(user1,(val_sim1,{tag1,tag2,..})),(user2,(val_sim2,{tag1,tag2,..})),...]) ordinato e  con valori pesati in base al numero di TAGS in comune
         user_simsWeight=None
-        if self.typeSimilarity=="Pearson":
+        if self.typeSimilarity=="pearson":
             user_simsWeight = pairwise_items.map(lambda p: TagBased.pearsonSimilarity(p[0],p[1],dictUser_meanRatesTags)).map(lambda p: TagBased.keyOnFirstItem(p[0],p[1])).groupByKey().map(lambda p: TagBased.computeWeightSim(p[0],p[1],weightSim))
-        elif self.typeSimilarity=="Cosine":
+        elif self.typeSimilarity=="cosine":
             user_simsWeight = pairwise_items.map(lambda p: TagBased.cosineSimilarity(p[0],p[1])).map(lambda p: TagBased.keyOnFirstItem(p[0],p[1])).groupByKey().map(lambda p: TagBased.computeWeightSim(p[0],p[1],weightSim))
         print("\nFinito di calcolare le somiglianze!")
         return user_simsWeight

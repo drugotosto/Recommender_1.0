@@ -161,13 +161,6 @@ class DataScienceAnalyzer():
         Per ogni utente calcolo del valore Tf-Idf associato ad ogni Tag a cui si è interessato.
         :param dizUserTag: Dizionario che associa ad ogni utente una lista di coppie (val,tag) che rappresentano numero di recensioni che si riferiscono ad un business con associato tag
         """
-        """
-        # Dizionario che associa ad ogni Tag il numero di business vengono associati al dato tag
-        tagsCounter=Counter([tag for arr in dfMerge[["business_id","categories"]].drop_duplicates(subset="business_id")["categories"].values for tag in arr])
-        # Creazione del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet (idf)
-        dizTags={tag:log((dfMerge.shape[0]/val),10) for tag,val in tagsCounter.items()}
-        """
-
         # Calcolo del dizionario che associa ad ogni tag il numero corrispondente di recensioni rigaurdanti business della data categoria
         tagsCounter=Counter([tag for arr in dfMerge["categories"].values for tag in arr])
         # Creazione del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet (idf)
@@ -188,14 +181,11 @@ class DataScienceAnalyzer():
 
         return dfMerge
 
-    def getCatBusiness(self, listBusiness):
+    def getBusTags(self):
         """
-        Recupero tutti le categorie differenti associate ai vari business
-        :return: Numero di categorie differenti
+        Ritorno un dizionario con associato per ogni business i corrispondenti tags
         """
-        listCategories=[self.dataFrame[self.dataFrame["business_id"]==business].head(1).categories.values[0] for business in listBusiness]
-        numCategories=len(set().union(*listCategories))
-        return numCategories
+        return {bus:categories for bus,categories in self.dataFrame.drop_duplicates(subset="business_id")[["business_id","categories"]].values}
 
     def retrieveFriends(self):
         """
