@@ -7,8 +7,8 @@ TagBased: 15 (con weightSim più alto crolla il coverage utente)
 """
 
 # Parametro x il SIGNIFICANCE WEIGHTING (pesare le somiglianze a seconda del numero di users/tags in comune)
-weightSim=10
+weightSim=45
 # Parametro relativo al numero di Vicini da prendere in considerazione nella predizione del rate
 nNeigh=10
 # Settaggio del tipo di misura di somiglianza da adottare (Cosine/Pearson)
-typeSimilarity="pearson"
+typeSimilarity="cosine"

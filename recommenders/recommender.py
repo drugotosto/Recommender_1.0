@@ -20,6 +20,8 @@ class Recommender:
         self.dictRec=None
         # Inizializzazione Evaluatore
         self.evaluator=Evaluator()
+        # Riferimento al fold che si sta esaminando
+        self.currentFold=None
 
 
     def createFolds(self,spEnv,usersFolds):
@@ -142,6 +144,9 @@ class Recommender:
                     ratings[jsonLine[0]][jsonLine[1]]=jsonLine[2]
         return ratings
 
+    def setCurrentFold(self,numberFold):
+        self.currentFold=numberFold
+
     def getName(self):
         return str(self.name)
 
@@ -153,5 +158,8 @@ class Recommender:
 
     def getEvaluator(self):
         return self.evaluator
+
+    def getCurrentFold(self):
+        return self.currentFold
 
 

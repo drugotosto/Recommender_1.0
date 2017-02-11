@@ -1,5 +1,6 @@
 import csv
 from conf.confDirFiles import dirPathOutput
+from conf.confRS import typeRecommender
 
 __author__ = 'maury'
 
@@ -39,13 +40,16 @@ def saveJsonData(data,directory,fileName):
         for dato in data:
             f.write(json.dumps(dato)+"\n")
 
-def convertJsonToCSV(fileJson):
-    row = json.load(open(fileJson,"r"))
-    print(row)
-    with open('fileJson2.csv', 'w') as f:
-        dict_writer = csv.DictWriter(f, fieldnames=["nTestRates","hits","mae","rmse","precision","recall","f1","covUsers","covMedioBus"])
-        dict_writer.writeheader()
-        dict_writer.writerow(row)
+def convertJsonToCSV(directoryFiles):
+    if not os.path.exists(directoryFiles+"csv/"):
+        os.makedirs(directoryFiles+"csv/")
+    for fileJson in os.listdir(directoryFiles):
+        if os.path.isfile(directoryFiles+fileJson):
+            row = json.load(open(directoryFiles+fileJson,"r"))
+            with open(directoryFiles+"csv/"+str(fileJson)[:-5]+".csv", 'w') as f:
+                dict_writer = csv.DictWriter(f, fieldnames=["nTestRates","hits","mae","rmse","precision","recall","f1","covUsers","covMedioBus"])
+                dict_writer.writeheader()
+                dict_writer.writerow(row)
 
 def deep_getsizeof(o, ids):
     """Find the memory footprint of a Python object
@@ -82,4 +86,4 @@ def deep_getsizeof(o, ids):
 
 if __name__ == '__main__':
     """ Possibilità di chiamare altri metodi per stampare dati/grafici e confrontate le prestazioni dei diversi Recommenders. """
-    convertJsonToCSV(dirPathOutput+"TagBased/Pearson_(nNeigh=10,weightSim=15).json")
+    convertJsonToCSV(dirPathOutput+typeRecommender+"/")

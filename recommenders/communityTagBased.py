@@ -1,3 +1,5 @@
+import shutil
+
 __author__ = 'maury'
 
 import json
@@ -5,32 +7,32 @@ import os
 
 from conf.confItemBased import weightSim
 from recommenders.tagBased import TagBased
-from recommenders.socialBased import SocialBased
+from recommenders.communityBased import CommunityBased
 from conf.confDirFiles import userTagJSON, dirPathInput, dirPathCommunities
 
 
-class SocialTagBased(SocialBased,TagBased):
+class CommunityTagBased(CommunityBased,TagBased):
     def __init__(self,name,friendships,communityType):
-        SocialBased.__init__(self,name,friendships,communityType)
+        CommunityBased.__init__(self,name,friendships,communityType)
 
     def builtModel(self,spEnv,directory):
         """
-        Costruzione del modello a secondo l'approccio CF ItemSocialBased
+        Costruzione del modello a secondo l'approccio CF ItemCommunityBased
         :return:
         """
         """
         Calcolo media dei Ratings (per ogni user) e creazione della corrispondente broadcast variable
         """
         # Unisco tutti i dati (da tutti i files contenuti nella directory train_k) ottengo (user,[(item,score),(item,score),...]
-        user_item_pair=spEnv.getSc().textFile(directory+"/*").map(lambda line: SocialTagBased.parseFileUser(line)).groupByKey()
-        user_meanRatesRatings=user_item_pair.map(lambda p: SocialTagBased.computeMean(p[0],p[1])).collectAsMap()
+        user_item_pair=spEnv.getSc().textFile(directory+"/*").map(lambda line: CommunityTagBased.parseFileUser(line)).groupByKey()
+        user_meanRatesRatings=user_item_pair.map(lambda p: CommunityTagBased.computeMean(p[0],p[1])).collectAsMap()
         dictUser_meanRatesRatings=spEnv.getSc().broadcast(user_meanRatesRatings)
 
         """
         Calcolo media dei valori associati ai Tags (per ogni user) e creazione della corrispondente broadcast variable (Utilizzo per misura Pearson)
         """
-        user_tagVal_pairs=spEnv.getSc().textFile(userTagJSON).map(lambda line: SocialTagBased.parseFileUser(line)).groupByKey()
-        user_meanRatesTags=user_tagVal_pairs.map(lambda p: SocialTagBased.computeMean(p[0],p[1])).collectAsMap()
+        user_tagVal_pairs=spEnv.getSc().textFile(userTagJSON).map(lambda line: CommunityTagBased.parseFileUser(line)).groupByKey()
+        user_meanRatesTags=user_tagVal_pairs.map(lambda p: CommunityTagBased.computeMean(p[0],p[1])).collectAsMap()
         dictUser_meanRatesTags=spEnv.getSc().broadcast(user_meanRatesTags)
         # print("\nDIZ COM: {}".format(user_meanRatesTags))
 
@@ -56,17 +58,15 @@ class SocialTagBased(SocialBased,TagBased):
         """
         Calcolo delle somiglianze tra users in base alle COMMUNITIES e creazione del corrispondente RDD (Recupero tutti i vicini "filtrati")
         """
-        if not os.path.exists(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/"):
+        if self.getCurrentFold()==0 and not os.path.exists(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/"):
             nNeigh=self.nNeigh
             # Recupero RDD con l'elenco delle communities associate ognuna ad una lista di utenti di cui ne fanno parte
             comm_listUsers=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/communitiesFriends.json").map(lambda x: json.loads(x))
             # Calcolo del valore di somiglianza tra tutti gli utenti appartenenti alla stessa communities ritorno i primi "N" Amici più simili: (user,[(user,valSim),...])
-            user_simsFriends=self.computeSimilarityFriends(spEnv,comm_listUsers).map(lambda p: SocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None)
-            # .map(lambda p: SocialBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
-            user_simsFriends.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/")
-        else:
-            print("\nLe somiglianze tra friends appartenenti alle stesse communities (trovate dall'algoritmo {}) sono già presenti!".format(self.communityType))
-            user_simsFriends=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/").map(lambda x: json.loads(x))
+            user_simsOrd=self.computeSimilarityFriends(spEnv,comm_listUsers).map(lambda p: CommunityBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: CommunityBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
+            user_simsOrd.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/")
+
+        user_simsFriends=spEnv.getSc().textFile(dirPathCommunities+"/"+self.communityType+"/user_simsOrd/").map(lambda x: json.loads(x))
 
         # print("\nSOMIGLIANZE tra Users in base a AMICI:")
         # for user,user_valPairs in user_simsFriends.take(5):
@@ -77,10 +77,10 @@ class SocialTagBased(SocialBased,TagBased):
         Creazione RDD delle somiglianze finale che tiene conto dei due RDD.
         """
         # Modifica dell'RDD relativo ai TAGS
-        user_simsTags=user_simsTags.mapValues(lambda x: SocialTagBased.RemoveTags(x))
+        user_simsTags=user_simsTags.mapValues(lambda x: CommunityTagBased.RemoveTags(x))
         # print("\nSemplificato RDD_TAGS Somiglianze!")
         nNeigh=self.nNeigh
-        user_simsTot=user_simsFriends.union(user_simsTags).reduceByKey(lambda listPair1,listPair2: SocialTagBased.joinPairs(listPair1,listPair2)).filter(lambda p: p!=None).map(lambda p: SocialTagBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
+        user_simsTot=user_simsFriends.union(user_simsTags).reduceByKey(lambda listPair1,listPair2: CommunityTagBased.joinPairs(listPair1,listPair2)).filter(lambda p: p!=None).map(lambda p: CommunityTagBased.nearestTagsNeighbors(p[0],p[1],nNeigh)).cache()
         # print("\nHo finito di calcolare valori di Somiglianze Globali tra utenti!")
         # print("\nUSER SIM_GLOB: {}".format(user_simsTot.take(10)))
 
@@ -90,7 +90,7 @@ class SocialTagBased(SocialBased,TagBased):
         user_item_hist=user_item_pair.collectAsMap()
         userHistoryRates=spEnv.getSc().broadcast(user_item_hist)
         # Calcolo per ogni utente la lista di TUTTI gli items suggeriti ordinati secondo predizione. Ritorno un pairRDD del tipo (user,[(scorePred,item),(scorePred,item),...])
-        user_item_recs = user_simsTot.map(lambda p: SocialTagBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: SocialTagBased.convertFloat_Int(p[0],p[1])).collectAsMap()
+        user_item_recs = user_simsTot.map(lambda p: CommunityTagBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: CommunityTagBased.convertFloat_Int(p[0],p[1])).collectAsMap()
         # Immagazzino la lista dei suggerimenti finali prodotti per sottoporla poi a valutazione
         self.setDictRec(user_item_recs)
         # print("\nLista suggerimenti: {}".format(self.dictRec))

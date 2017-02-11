@@ -10,7 +10,7 @@ import pandas as pd
 import json
 
 from conf.confDirFiles import reviewsJSON, businessJSON, usersJSON, dirPathInput, userTagJSON
-from conf.confRS import tag, tagToFilter, numTags, numRec
+from conf.confRS import tag, tagToFilter, numRec
 from tools.tools import saveJsonData
 
 class DataScienceAnalyzer():
@@ -21,7 +21,7 @@ class DataScienceAnalyzer():
         self.numBusiness=None
         self.numCatBus=None
 
-    def createDataSet(self,numTags):
+    def createDataSet(self):
         print("\n******** Creo il DataSet di partenza! *********")
         # LETTURA DEL FILE JSON DELLE REVIEWS A PEZZI
         dfRatings=self.createRatingsDF()
@@ -39,8 +39,8 @@ class DataScienceAnalyzer():
         print("\nFiltraggio su dfMerge degli users che hanno rilasciato un numero di recensioni < "+str(numRec))
         dfMerge=self.userFilterByNumRatings(dfMerge)
 
-        print("\nFiltraggio su dfMerge degli users per i quali tra tutti i tags associati ai business votati neanche 1 tra questi è presente almeno {} volte".format(numTags))
-        dfMerge,dizUserTag=self.userFilterByNumTags(dfMerge)
+        print("\nFiltraggio su dfMerge degli users che hanno votato esclusivamente business appartenenti alle sole categorie filtrate: {}".format(set(tagToFilter+[tag])))
+        dfMerge,dizUserTag=self.userFilterTags(dfMerge)
 
         print("\nCreazione del File Json 'dizUserTag' che associa ad ogni utente la lista dei Tags dei business da lui votati con relativo peso con valori [0-10]")
         self.createUserTagJSON(dizUserTag,dfMerge)
@@ -120,35 +120,23 @@ class DataScienceAnalyzer():
 
     def userFilterByNumRatings(self, dfMerge):
         return dfMerge.groupby("user_id").filter(lambda x: len(x) >= numRec)
-        # # Recupero lista dei soli users che hanno votato almeno numRec business
-        # usersFilt=[user for user,count in dict(dfMerge.groupby("user_id").size()).items() if count>=numRec]
-        # # Filtro il dataSet iniziale mantenendo solo gli users recuperati precedentemente
-        # return dfMerge[dfMerge["user_id"].isin(usersFilt)]
 
-    def userFilterByNumTags(self, dfMerge):
+    def userFilterTags(self, dfMerge):
         # Categorie da rimuovere
         tagsToRemove=set(tagToFilter+[tag])
-        print("Insieme dei tags da rimuovere: {}".format(tagsToRemove))
 
         # Funzione per sostituire elementi della colonna "categories"
         def substitute(listTags,listTagsRemove):
             return [x for x in listTags if x not in listTagsRemove]
 
         dfMerge["categories"]=dfMerge["categories"].apply(lambda x: substitute(x,tagsToRemove))
-        # Creo il dizionario che contiene per ogni utente la lista di tutti i tags (con ripetizione) associate ai business votati dall'utente
+        # Creo il dizionario che contiene per ogni utente la lista 1di tutti i tags (con ripetizione) associate ai business votati dall'utente
         dizUserTag=defaultdict(list)
         for k, v in list(zip(dfMerge["user_id"],dfMerge["categories"])):
             if v:
                 dizUserTag[k].extend(v)
 
-        def filterUsers(dizTags):
-            for val in dict(dizTags).values():
-                if val>=numTags:
-                    return [(k,v) for k,v in dict(dizTags).items()]
-            return []
-
         dizUserTag={k:Counter(v) for k,v in dizUserTag.items()}
-        dizUserTag={k:filterUsers(v) for k,v in dizUserTag.items()}
 
         # Rimuovo utenti che non hanno associato nessun Tag
         dizUserTag={user:listPairs for user,listPairs in dizUserTag.items() if len(listPairs)>0}
@@ -161,6 +149,10 @@ class DataScienceAnalyzer():
         Per ogni utente calcolo del valore Tf-Idf associato ad ogni Tag a cui si è interessato.
         :param dizUserTag: Dizionario che associa ad ogni utente una lista di coppie (val,tag) che rappresentano numero di recensioni che si riferiscono ad un business con associato tag
         """
+        # for user,listPair in list(dizUserTag.items())[:2]:
+        #     print("\nuser: {}".format(user))
+        #     print("\nlistPair: {}".format(listPair))
+
         # Calcolo del dizionario che associa ad ogni tag il numero corrispondente di recensioni rigaurdanti business della data categoria
         tagsCounter=Counter([tag for arr in dfMerge["categories"].values for tag in arr])
         # Creazione del dizionario che associa ad ogni Tag la relativa frequenza all'interna del DataSet (idf)
@@ -170,7 +162,8 @@ class DataScienceAnalyzer():
         dictUser_Nrec=dict(dfMerge.groupby("user_id").size())
 
         # Creazione file Json "userTag.json" che associa ogni utente l'insieme dei Tags dei business da lui votati con relativo valore Tf-Idf
-        saveJsonData([(user,tag,((val/dictUser_Nrec[user])*dizTags[tag])) for user,listPairs in dizUserTag.items() for tag,val in listPairs],dirPathInput,userTagJSON)
+        saveJsonData([(user,tag,((val/dictUser_Nrec[user])*dizTags[tag])) for user,listPairs in dizUserTag.items() for tag,val in listPairs.items()],dirPathInput,userTagJSON)
+        # saveJsonData([(user,tag,(val/dictUser_Nrec[user])) for user,listPairs in dizUserTag.items() for tag,val in listPairs.items()],dirPathInput,userTagJSON)
 
     def userFilterByFriends(self, dfMerge):
         def filterFriends(x):
@@ -187,12 +180,39 @@ class DataScienceAnalyzer():
         """
         return {bus:categories for bus,categories in self.dataFrame.drop_duplicates(subset="business_id")[["business_id","categories"]].values}
 
-    def retrieveFriends(self):
+    def createDizFriendships(self):
         """
         Recupero dei diversi friends per ogni utente che fa parte del Dataset
         :return: Dizionario delle amicizi degli utenti
         """
         friendships={user:set(friends) for user,friends in self.dataFrame.drop_duplicates(subset="user_id")[["user_id","friends"]].values}
+
+        def createPairs(user,listFriends):
+            return [(user,friend) for friend in listFriends]
+
+        """ Creo gli archi del grafo mancanti """
+        listaList=[createPairs(user,listFriends) for user,listFriends in friendships.items()]
+        archiPresenti={coppia for lista in listaList for coppia in lista}
+        archiMancanti={(arco[1],arco[0]) for arco in archiPresenti if (arco[1],arco[0]) not in archiPresenti}
+        # print("\n- Numero di archi mancanti: {}".format(len(archiMancanti)))
+        archiDoppi=archiPresenti.union(archiMancanti)
+        # print("\n- Numero di archi/Amicizie (doppie) totali presenti sono: {}".format(len(archiDoppi)))
+
+        """ Costruisco il dizionario con ARCHI DOPPI senza peso sugli archi """
+        dizFriendshipsDouble=defaultdict(list)
+        for k, v in archiDoppi:
+            dizFriendshipsDouble[k].append(v)
+        # print("\n- Numero di utenti: {}".format(len([user for user in dizFriendshipsDouble])))
+
+        """ Costruisco il dizionario con gli archi pesati (dato dal numero di amicizie in comune tra utenti) """
+        def createListFriendsDoubleWeight(user,dizFriendshipsDouble):
+            return [(friend,len(set(dizFriendshipsDouble[user])&set(dizFriendshipsDouble[friend]))+1) for friend in dizFriendshipsDouble[user]]
+
+        friendships={user:createListFriendsDoubleWeight(user,dizFriendshipsDouble) for user in dizFriendshipsDouble}
+
+        print("\nNumero di AMICIZIE (doppie) presenti sono: {}".format(sum([len(lista) for lista in friendships.values()])))
+        # numUtenti=len(set([user for user in friendships]).union(set([user for lista in friendships.values() for user,_ in lista])))
+        print("\nNumero di UTENTI che sono presenti in communities: {} (alcuni non avevano amicizie...)".format(len(list(friendships.keys()))))
         return friendships
 
     def printValuesDataset(self):

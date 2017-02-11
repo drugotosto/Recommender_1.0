@@ -11,13 +11,13 @@ from tools.sparkEnvLocal import SparkEnvLocal
 from recommenders.itemBased import ItemBased
 from recommenders.tagBased import TagBased
 from conf.confDirFiles import dirPathInput
-from recommenders.socialBased import SocialBased
+from recommenders.communityBased import CommunityBased
 
 class FriendsBased(ItemBased):
     def __init__(self,name,friendships):
         ItemBased.__init__(self,name=name)
         # Creazione del dizionario delle amicizie che ad ogni amico associa un valore di somiglianza data dalla Jaccard metrix
-        self.friendships=self.createDizFriendships(friendships)
+        self.friendships=friendships
 
     def builtModel(self,spEnv,directory):
         """
@@ -43,7 +43,8 @@ class FriendsBased(ItemBased):
 
         # print("\nfriendships: {}".format(self.friendships.items()))
         # Creo RDD che rappresenta la lista di utenti del dataset con associati friends e relativo valore di Somiglianza (Solo Filtraggio Senza Top-N vicini)
-        users=spEnv.getSc().parallelize(self.friendships.items()).map(lambda p: SocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None)
+        nNeigh=self.nNeigh
+        users=spEnv.getSc().parallelize(self.friendships.items()).map(lambda p: CommunityBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: CommunityBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
         users.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathInput+"/FriendsSim/")
 
         user_simsOrd=spEnv.getSc().textFile(dirPathInput+"/FriendsSim/").map(lambda x: json.loads(x))
@@ -60,7 +61,7 @@ class FriendsBased(ItemBased):
         user_item_hist=user_item_pair.collectAsMap()
         userHistoryRates=spEnv.getSc().broadcast(user_item_hist)
         # Calcolo per ogni utente la lista di TUTTI gli items suggeriti ordinati secondo predizione. Ritorno un pairRDD del tipo (user,[(scorePred,item),(scorePred,item),...])
-        user_item_recs = user_simsOrd.map(lambda p: SocialBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagBased.convertFloat_Int(p[0],p[1])).collectAsMap()
+        user_item_recs = user_simsOrd.map(lambda p: CommunityBased.recommendationsUserBasedSocial(p[0],p[1],userHistoryRates.value,dictUser_meanRatesRatings.value)).map(lambda p: TagBased.convertFloat_Int(p[0],p[1])).collectAsMap()
         # Immagazzino la lista dei suggerimenti finali prodotti per sottoporla poi a valutazione
         self.setDictRec(user_item_recs)
         print("\nLista di raccomandazioni calcolata!")
@@ -100,7 +101,7 @@ class FriendsBased(ItemBased):
 
         """ Costruisco il dizionario che per ogni utente contiene la lista degli amici con peso associato dato da Jaccard similarity """
         def createListFriendsDoubleWeight(user,dizFriendshipsDouble):
-            return [(friend,(len(set(dizFriendshipsDouble[user])&(set(dizFriendshipsDouble[friend])))+1)/(len(set(dizFriendshipsDouble[user])|(set(dizFriendshipsDouble[friend])))+1)) for friend in dizFriendshipsDouble[user]]
+            return [(friend,(len(set(dizFriendshipsDouble[user])&(set(dizFriendshipsDouble[friend])))+1)/(len(set(dizFriendshipsDouble[user])|(set(dizFriendshipsDouble[friend]))))) for friend in dizFriendshipsDouble[user]]
 
         dictFriendships={user:createListFriendsDoubleWeight(user,dizFriendshipsDouble) for user in dizFriendshipsDouble}
 

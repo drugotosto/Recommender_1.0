@@ -12,18 +12,18 @@ import shutil
 
 from recommenders.friendsBased import FriendsBased
 from conf.confDirFiles import dirPathInput
-from recommenders.socialBased import SocialBased
+from recommenders.communityBased import CommunityBased
 from tools.tools import deep_getsizeof
 
 
-class FriendsTagBased(FriendsBased):
+class FriendsRateBased(FriendsBased):
     def __init__(self,name,friendships,dictBus_Tags):
         FriendsBased.__init__(self,name,friendships)
         self.dictBus_Tags=dictBus_Tags
 
     def builtModel(self,spEnv,directory):
         """
-        Costruzione del modello a secondo l'approccio CF ItemSocialBased
+        Costruzione del modello a secondo l'approccio CF ItemCommunityBased
         :return:
         """
         """
@@ -52,7 +52,8 @@ class FriendsTagBased(FriendsBased):
 
         # print("\nfriendships: {}".format(self.friendships.items()))
         # Creo RDD che rappresenta la lista di utenti del dataset con associati friends e relativo valore di Somiglianza
-        users=spEnv.getSc().parallelize(self.friendships.items()).map(lambda p: SocialBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None)
+        nNeigh=self.nNeigh
+        users=spEnv.getSc().parallelize(self.friendships.items()).map(lambda p: CommunityBased.filterSimilarities(p[0],p[1])).filter(lambda p: p!=None).map(lambda p: CommunityBased.nearestFriendsNeighbors(p[0],p[1],nNeigh))
         users.map(lambda x: json.dumps(x)).saveAsTextFile(dirPathInput+"/FriendsSim/")
 
         user_simsFriends=spEnv.getSc().textFile(dirPathInput+"/FriendsSim/").map(lambda x: json.loads(x))
@@ -69,7 +70,7 @@ class FriendsTagBased(FriendsBased):
         userHistoryRates=spEnv.getSc().broadcast(user_item_hist)
         dictBus_Tags=self.dictBus_Tags
         # Calcolo per ogni utente la lista di TUTTI gli items suggeriti ordinati secondo predizione. Ritorno un pairRDD del tipo (user,[(scorePred,item),(scorePred,item),...])
-        user_item_recs = user_simsFriends.map(lambda p: FriendsTagBased.recommendationsUserBasedFriends(p[0],p[1],userHistoryRates.value,dictUser_meanRatings.value,user_Tag_Friends.value,dictBus_Tags)).map(lambda p: FriendsBased.convertFloat_Int(p[0],p[1])).collectAsMap()
+        user_item_recs = user_simsFriends.map(lambda p: FriendsRateBased.recommendationsUserBasedFriends(p[0],p[1],userHistoryRates.value,dictUser_meanRatings.value,user_Tag_Friends.value,dictBus_Tags)).map(lambda p: FriendsBased.convertFloat_Int(p[0],p[1])).collectAsMap()
         # Immagazzino la lista dei suggerimenti finali prodotti per sottoporla poi a valutazione
         self.setDictRec(user_item_recs)
         # print("\nLista suggerimenti: {}".format(self.dictRec))
